@@ -85,39 +85,64 @@ function MonteAppContent() {
   useEffect(() => {
     let mounted = true;
 
+    const applySupabaseSessionUser = async (
+      sessionUser: {
+        id: string;
+        email?: string;
+        user_metadata?: Record<string, unknown>;
+      } | null
+    ) => {
+      if (!mounted) return;
+      if (!sessionUser) {
+        return;
+      }
+
+      const uid = sessionUser.id;
+      setSupabaseUserId(uid);
+      setIsAuthenticated(true);
+
+      const meta = sessionUser.user_metadata || {};
+      const googleName =
+        (meta.full_name as string) ||
+        (meta.name as string) ||
+        sessionUser.email?.split('@')[0] ||
+        'Monte Member';
+      const googleAvatar =
+        (meta.avatar_url as string) || (meta.picture as string) || '';
+      const parts = googleName.trim().split(/\s+/);
+      const initials = (
+        (parts[0]?.[0] || 'M') + (parts[1]?.[0] || parts[0]?.[1] || 'E')
+      ).toUpperCase();
+
+      setUser((prev) => ({
+        ...prev,
+        name: googleName,
+        username:
+          googleName.toLowerCase().replace(/[^a-z0-9_]/g, '') || prev.username,
+        email: sessionUser.email || prev.email,
+        phone: (meta.phone as string) || prev.phone,
+        avatarUrl: googleAvatar || prev.avatarUrl,
+        initials,
+      }));
+
+      const dbProfile = await fetchProfileFromSupabase(uid);
+      if (mounted && dbProfile) {
+        setUser((prev) => ({
+          ...prev,
+          ...dbProfile,
+          avatarUrl: dbProfile.avatarUrl || googleAvatar || prev.avatarUrl,
+        }));
+      }
+    };
+
     const syncFromSupabase = async () => {
       try {
         const { data: sessionData } = await supabase.auth.getSession();
-        const sessionUser = sessionData.session?.user;
-        const uid = sessionUser?.id || null;
-        if (mounted && uid && sessionUser) {
-          setSupabaseUserId(uid);
-          setIsAuthenticated(true);
-          const dbProfile = await fetchProfileFromSupabase(uid);
-          if (mounted) {
-            if (dbProfile) {
-              setUser((prev) => ({ ...prev, ...dbProfile }));
-            } else {
-              const fallbackName =
-                (sessionUser.user_metadata?.full_name as string) ||
-                sessionUser.email?.split('@')[0] ||
-                'Monte Member';
-              const parts = fallbackName.split(' ');
-              const initials = (
-                (parts[0]?.[0] || 'M') + (parts[1]?.[0] || parts[0]?.[1] || 'E')
-              ).toUpperCase();
-              setUser((prev) => ({
-                ...prev,
-                name: fallbackName,
-                username: fallbackName.toLowerCase().replace(/[^a-z0-9_]/g, '') || 'member',
-                email: sessionUser.email || '',
-                phone: (sessionUser.user_metadata?.phone as string) || '',
-                initials,
-              }));
-            }
-          }
+        const sessionUser = sessionData.session?.user || null;
+        if (sessionUser) {
+          await applySupabaseSessionUser(sessionUser);
         }
-        const synced = await loadAllMonteData(uid || undefined, {
+        const synced = await loadAllMonteData(sessionUser?.id || undefined, {
           events: INITIAL_EVENTS,
           messagesByEvent: INITIAL_MESSAGES,
           media: INITIAL_MEDIA,
@@ -150,6 +175,20 @@ function MonteAppContent() {
         }
       }
     };
+
+    // Listen for Google OAuth / Magic Link / Sign Out auth state changes
+    const {
+      data: { subscription: authSubscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+      if (session?.user) {
+        void applySupabaseSessionUser(session.user);
+      } else if (event === 'SIGNED_OUT') {
+        setSupabaseUserId(null);
+        setIsAuthenticated(false);
+        setCurrentPage('dashboard');
+      }
+    });
 
     void syncFromSupabase();
 
@@ -240,6 +279,7 @@ function MonteAppContent() {
 
     return () => {
       mounted = false;
+      authSubscription.unsubscribe();
       void supabase.removeChannel(channel);
     };
   }, []);
@@ -277,43 +317,50 @@ function MonteAppContent() {
     [events]
   );
 
-  const handleLogin = (payload: {
-    userId: string;
+  const handleLogin = (payload?: {
+    userId?: string;
     name?: string;
     email?: string;
     phone?: string;
+    avatarUrl?: string;
+    isDemo?: boolean;
   }) => {
-    setSupabaseUserId(payload.userId);
-    const nextName =
-      payload.name || payload.email?.split('@')[0] || 'Monte Member';
-    const parts = nextName.split(' ');
-    const initials = (
-      (parts[0]?.[0] || 'M') + (parts[1]?.[0] || parts[0]?.[1] || 'E')
-    ).toUpperCase();
-    setUser((prev) => ({
-      ...prev,
-      name: nextName,
-      username: nextName.toLowerCase().replace(/[^a-z0-9_]/g, '') || 'member',
-      email: payload.email || '',
-      phone: payload.phone || '',
-      initials,
-    }));
-    void fetchProfileFromSupabase(payload.userId).then((dbProfile) => {
-      if (dbProfile) {
-        setUser((prev) => ({ ...prev, ...dbProfile }));
-      }
-    });
+    if (payload?.userId) {
+      setSupabaseUserId(payload.userId);
+      const nextName =
+        payload.name || payload.email?.split('@')[0] || 'Monte Member';
+      const parts = nextName.split(' ');
+      const initials = (
+        (parts[0]?.[0] || 'M') + (parts[1]?.[0] || parts[0]?.[1] || 'E')
+      ).toUpperCase();
+      setUser((prev) => ({
+        ...prev,
+        name: nextName,
+        username: nextName.toLowerCase().replace(/[^a-z0-9_]/g, '') || 'member',
+        email: payload.email || prev.email,
+        phone: payload.phone || prev.phone,
+        avatarUrl: payload.avatarUrl || prev.avatarUrl,
+        initials,
+      }));
+      void fetchProfileFromSupabase(payload.userId).then((dbProfile) => {
+        if (dbProfile) {
+          setUser((prev) => ({ ...prev, ...dbProfile }));
+        }
+      });
+    } else if (payload?.isDemo) {
+      setUser(INITIAL_USER_PROFILE);
+    }
     setIsAuthenticated(true);
     setCurrentPage('dashboard');
     showToast('Welcome to MONTE EVENTS!');
   };
 
-  const handleLogout = () => {
-    void signOutSupabase();
+  const handleLogout = async () => {
+    await signOutSupabase();
     setSupabaseUserId(null);
     setIsAuthenticated(false);
     setCurrentPage('dashboard');
-    showToast('Logged out successfully', 'info');
+    showToast('Signed out successfully', 'info');
   };
 
   const handleOpenEvent = (eventId: string, tab: EventRoomTab = 'guests') => {
@@ -622,7 +669,7 @@ function MonteAppContent() {
   return (
     <>
       {!isAuthenticated ? (
-        <AuthPage onLogin={handleLogin} />
+        <AuthPage onLogin={handleLogin} onShowToast={showToast} />
       ) : (
         <AppShell
           currentPage={currentPage}

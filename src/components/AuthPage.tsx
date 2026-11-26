@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ArrowRight,
   Camera,
+  CheckCircle2,
   Eye,
   EyeOff,
   Film,
+  Loader2,
   Lock,
   Mail,
   Phone,
@@ -16,18 +18,21 @@ import { MonteLogo } from './MonteLogo';
 import { ThemeToggle } from './ThemeToggle';
 import { EASE_SKIPER, MagneticButton, SPRING_SNAPPY } from './MotionPrimitives';
 import { signInWithEmail, signUpWithEmail } from '../lib/monteService';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/supabaseClient.js';
 
 interface AuthPageProps {
-  onLogin: (payload: {
-    userId: string;
+  onLogin: (payload?: {
+    userId?: string;
     name?: string;
     email?: string;
     phone?: string;
+    avatarUrl?: string;
+    isDemo?: boolean;
   }) => void;
+  onShowToast?: (message: string, type?: 'success' | 'info') => void;
 }
 
-export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
+export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onShowToast }) => {
   const [showSplash, setShowSplash] = useState(true);
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [name, setName] = useState('');
@@ -36,8 +41,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const [phone, setPhone] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [magicLinkLoading, setMagicLinkLoading] = useState(false);
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const emailInputRef = useRef<HTMLInputElement>(null);
 
   // Subtle cursor-reactive parallax drift for splash decorative droplets
   const prefersReduced = useReducedMotion();
@@ -116,14 +125,62 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const handleGoogleOAuth = async () => {
     setAuthError(null);
     setAuthNotice(null);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}${window.location.pathname}`,
-      },
-    });
-    if (error) {
-      setAuthError(error.message);
+    setMagicLinkSent(false);
+    setGoogleLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin + window.location.pathname,
+        },
+      });
+      if (error) {
+        setAuthError(error.message);
+        onShowToast?.(error.message, 'info');
+        setGoogleLoading(false);
+      }
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : 'Google Sign-In failed. Please try again.';
+      setAuthError(msg);
+      onShowToast?.(msg, 'info');
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleMagicLink = async () => {
+    setAuthError(null);
+    setAuthNotice(null);
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+      setAuthError('Enter your email address above first to receive a Magic Link.');
+      emailInputRef.current?.focus();
+      return;
+    }
+
+    setMagicLinkLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: trimmedEmail,
+        options: {
+          emailRedirectTo: window.location.origin + window.location.pathname,
+        },
+      });
+      if (error) {
+        setAuthError(error.message);
+        onShowToast?.(error.message, 'info');
+        return;
+      }
+      setMagicLinkSent(true);
+      setAuthNotice('Check your email for your login link');
+      onShowToast?.('Check your email for your login link!', 'success');
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : 'Failed to send login link.';
+      setAuthError(msg);
+      onShowToast?.(msg, 'info');
+    } finally {
+      setMagicLinkLoading(false);
     }
   };
 
@@ -222,6 +279,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
               <span>Get Started</span>
               <ArrowRight className="h-4 w-4" />
             </MagneticButton>
+            <motion.button
+              type="button"
+              onClick={() => onLogin({ isDemo: true })}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+              transition={SPRING_SNAPPY}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/40 bg-white/85 dark:bg-[#13224A] px-6 py-3.5 text-sm font-bold text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF] dark:hover:border-[#2B7FFF] hover:shadow-[0_0_0_3px_rgba(43,127,255,0.22)] transition-all"
+            >
+              Quick Demo Enter
+            </motion.button>
           </motion.div>
 
           {/* 5. Bottom Media-Vault Badge */}
@@ -330,9 +397,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#1A6BFF] dark:text-[#2B7FFF]" />
                 <input
+                  ref={emailInputRef}
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (magicLinkSent) setMagicLinkSent(false);
+                  }}
                   placeholder="you@monteevents.co.ke"
                   required
                   className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] pl-10 pr-4 py-2.5 text-sm text-[#0A1E5C] dark:text-white placeholder:text-[#0A1E5C]/40 dark:placeholder:text-white/40 focus:border-[#1A6BFF] focus:outline-none focus:ring-2 focus:ring-[#1A6BFF]/20"
@@ -390,17 +461,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
             )}
 
             {authNotice && (
-              <p className="rounded-xl bg-[#F0F6FF] dark:bg-[#0B1A3A] px-3 py-2 text-xs font-semibold text-[#1A6BFF] dark:text-[#2B7FFF]">
-                {authNotice}
-              </p>
+              <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>{authNotice}</span>
+              </div>
             )}
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || googleLoading || magicLinkLoading}
               className="w-full flex items-center justify-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] disabled:opacity-60 py-3.5 text-sm font-extrabold text-white shadow-monte transition active:scale-[0.99]"
             >
-              <Sparkles className="h-4 w-4" />
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
               {loading
                 ? 'Connecting to Monte...'
                 : mode === 'signup'
@@ -410,58 +486,68 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
             </button>
           </form>
 
-          {/* Divider */}
-          <div className="relative my-5 flex items-center justify-center">
-            <div className="h-px w-full bg-[#D6E6FF] dark:bg-[#2B7FFF]/20" />
-            <span className="bg-white dark:bg-[#13224A] px-3 text-xs font-semibold text-[#0A1E5C]/50 dark:text-white/50">
+          {/* Divider with whitespace-nowrap so it stays cleanly on one line */}
+          <div className="relative my-5 flex items-center justify-center gap-3">
+            <div className="h-px flex-1 bg-[#D6E6FF] dark:bg-[#2B7FFF]/20" />
+            <span className="whitespace-nowrap shrink-0 text-xs font-semibold text-[#0A1E5C]/55 dark:text-white/55">
               or continue with
             </span>
-            <div className="h-px w-full bg-[#D6E6FF] dark:bg-[#2B7FFF]/20" />
+            <div className="h-px flex-1 bg-[#D6E6FF] dark:bg-[#2B7FFF]/20" />
           </div>
 
-          {/* Social Buttons */}
+          {/* Auth Provider Buttons: Google OAuth + Email Magic Link */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <button
               type="button"
               onClick={handleGoogleOAuth}
-              className="flex items-center justify-center gap-2 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/50 dark:bg-[#0B1A3A] px-4 py-2.5 text-xs font-bold text-[#0A1E5C] dark:text-white hover:bg-[#D6E6FF]/50 dark:hover:bg-[#1A2D5E] transition"
+              disabled={googleLoading || magicLinkLoading}
+              className="flex items-center justify-center gap-2 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/50 dark:bg-[#0B1A3A] px-4 py-2.5 text-xs font-bold text-[#0A1E5C] dark:text-white hover:bg-[#D6E6FF]/50 dark:hover:bg-[#1A2D5E] disabled:opacity-60 transition"
             >
-              <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  fill="#4285F4"
-                  d="M23.745 12.27c0-.79-.07-1.54-.19-2.27h-11.3v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12.255 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96h-3.98v3.09C3.515 21.3 7.565 24 12.255 24z"
-                />
-                <path
-                  fill="#1A6BFF"
-                  d="M5.525 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62h-3.98a11.86 11.86 0 000 10.76l3.98-3.09z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12.255 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C18.205 1.19 15.495 0 12.255 0c-4.69 0-8.74 2.7-10.71 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"
-                />
-              </svg>
-              Continue with Google
+              {googleLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin text-[#1A6BFF] dark:text-[#2B7FFF]" />
+              ) : (
+                <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    fill="#4285F4"
+                    d="M23.745 12.27c0-.79-.07-1.54-.19-2.27h-11.3v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12.255 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96h-3.98v3.09C3.515 21.3 7.565 24 12.255 24z"
+                  />
+                  <path
+                    fill="#1A6BFF"
+                    d="M5.525 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62h-3.98a11.86 11.86 0 000 10.76l3.98-3.09z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12.255 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C18.205 1.19 15.495 0 12.255 0c-4.69 0-8.74 2.7-10.71 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"
+                  />
+                </svg>
+              )}
+              <span className="whitespace-nowrap">
+                {googleLoading ? 'Redirecting…' : 'Continue with Google'}
+              </span>
             </button>
 
             <button
               type="button"
-              onClick={() =>
-                setAuthNotice(
-                  'Use Email & Password or Google sign-in to access your Monte account.'
-                )
-              }
-              className="flex items-center justify-center gap-2 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/50 dark:bg-[#0B1A3A] px-4 py-2.5 text-xs font-bold text-[#0A1E5C] dark:text-white hover:bg-[#D6E6FF]/50 dark:hover:bg-[#1A2D5E] transition"
+              onClick={handleMagicLink}
+              disabled={magicLinkLoading || googleLoading}
+              className="flex items-center justify-center gap-2 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/50 dark:bg-[#0B1A3A] px-4 py-2.5 text-xs font-bold text-[#0A1E5C] dark:text-white hover:bg-[#D6E6FF]/50 dark:hover:bg-[#1A2D5E] disabled:opacity-60 transition"
             >
-              <svg className="h-4 w-4 text-[#1A6BFF] dark:text-[#2B7FFF]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
-                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
-              </svg>
-              Continue with Instagram
+              {magicLinkLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin text-[#1A6BFF] dark:text-[#2B7FFF]" />
+              ) : (
+                <Mail className="h-4 w-4 shrink-0 text-[#1A6BFF] dark:text-[#2B7FFF]" />
+              )}
+              <span className="whitespace-nowrap">
+                {magicLinkLoading
+                  ? 'Sending link…'
+                  : magicLinkSent
+                  ? 'Link Sent!'
+                  : 'Continue with Email'}
+              </span>
             </button>
           </div>
         </div>

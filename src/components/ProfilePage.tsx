@@ -529,14 +529,14 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
             </div>
           </div>
 
-          {/* Log Out */}
+          {/* Sign Out */}
           <button
             type="button"
             onClick={onLogout}
             className="w-full flex items-center justify-center gap-2 rounded-2xl border border-red-400/40 bg-red-500/10 hover:bg-red-500/20 py-3.5 text-sm font-extrabold text-red-600 dark:text-red-400 transition"
           >
             <LogOut className="h-4 w-4" />
-            Log Out of Monte Events
+            Sign Out
           </button>
         </div>
       )}
