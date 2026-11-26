@@ -323,33 +323,29 @@ function MonteAppContent() {
     email?: string;
     phone?: string;
     avatarUrl?: string;
-    isDemo?: boolean;
   }) => {
-    if (payload?.userId) {
-      setSupabaseUserId(payload.userId);
-      const nextName =
-        payload.name || payload.email?.split('@')[0] || 'Monte Member';
-      const parts = nextName.split(' ');
-      const initials = (
-        (parts[0]?.[0] || 'M') + (parts[1]?.[0] || parts[0]?.[1] || 'E')
-      ).toUpperCase();
-      setUser((prev) => ({
-        ...prev,
-        name: nextName,
-        username: nextName.toLowerCase().replace(/[^a-z0-9_]/g, '') || 'member',
-        email: payload.email || prev.email,
-        phone: payload.phone || prev.phone,
-        avatarUrl: payload.avatarUrl || prev.avatarUrl,
-        initials,
-      }));
-      void fetchProfileFromSupabase(payload.userId).then((dbProfile) => {
-        if (dbProfile) {
-          setUser((prev) => ({ ...prev, ...dbProfile }));
-        }
-      });
-    } else if (payload?.isDemo) {
-      setUser(INITIAL_USER_PROFILE);
-    }
+    if (!payload?.userId) return;
+    setSupabaseUserId(payload.userId);
+    const nextName =
+      payload.name || payload.email?.split('@')[0] || 'Monte Member';
+    const parts = nextName.split(' ');
+    const initials = (
+      (parts[0]?.[0] || 'M') + (parts[1]?.[0] || parts[0]?.[1] || 'E')
+    ).toUpperCase();
+    setUser((prev) => ({
+      ...prev,
+      name: nextName,
+      username: nextName.toLowerCase().replace(/[^a-z0-9_]/g, '') || 'member',
+      email: payload.email || prev.email,
+      phone: payload.phone || prev.phone,
+      avatarUrl: payload.avatarUrl || prev.avatarUrl,
+      initials,
+    }));
+    void fetchProfileFromSupabase(payload.userId).then((dbProfile) => {
+      if (dbProfile) {
+        setUser((prev) => ({ ...prev, ...dbProfile }));
+      }
+    });
     setIsAuthenticated(true);
     setCurrentPage('dashboard');
     showToast('Welcome to MONTE EVENTS!');

@@ -279,16 +279,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onShowToast }) => {
               <span>Get Started</span>
               <ArrowRight className="h-4 w-4" />
             </MagneticButton>
-            <motion.button
-              type="button"
-              onClick={() => onLogin({ isDemo: true })}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
-              transition={SPRING_SNAPPY}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/40 bg-white/85 dark:bg-[#13224A] px-6 py-3.5 text-sm font-bold text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF] dark:hover:border-[#2B7FFF] hover:shadow-[0_0_0_3px_rgba(43,127,255,0.22)] transition-all"
-            >
-              Quick Demo Enter
-            </motion.button>
           </motion.div>
 
           {/* 5. Bottom Media-Vault Badge */}
