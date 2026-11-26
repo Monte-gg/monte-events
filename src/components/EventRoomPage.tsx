@@ -132,7 +132,7 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
   }, [event.guests, guestFilter, guestSearch]);
 
   const handleCopyLink = () => {
-    const url = `https://monteevents.app/join/${event.inviteCode}`;
+    const url = `https://monte-gg.github.io/monte-events/?join=${event.inviteCode}`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(url).catch(() => {});
     }

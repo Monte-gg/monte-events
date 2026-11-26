@@ -116,7 +116,7 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
     () => `MONTE-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
     []
   );
-  const inviteUrl = `https://monteevents.app/join/${inviteCode}`;
+  const inviteUrl = `https://monte-gg.github.io/monte-events/?join=${inviteCode}`;
 
   const costPerPerson = useMemo(() => {
     if (!maxGuests || maxGuests < 1) return 0;

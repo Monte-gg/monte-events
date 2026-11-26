@@ -23,6 +23,7 @@ import {
   UserProfile,
 } from '../types';
 import { formatDateShort, formatKES } from '../data/sampleData';
+import { ApiStatus } from '../lib/api';
 import { motion } from 'motion/react';
 import { ThemeToggle } from './ThemeToggle';
 import {
@@ -38,6 +39,7 @@ interface DashboardPageProps {
   events: MonteEvent[];
   media: MediaItem[];
   notifications: NotificationItem[];
+  apiStatus?: ApiStatus;
   onMarkNotificationsRead: () => void;
   onOpenEvent: (eventId: string, tab?: EventRoomTab) => void;
   onNavigate: (page: AppPage) => void;
@@ -49,6 +51,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   events,
   media,
   notifications,
+  apiStatus = 'demo',
   onMarkNotificationsRead,
   onOpenEvent,
   onNavigate,
@@ -97,9 +100,35 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       {/* Top Bar */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-[#1A6BFF] dark:text-[#2B7FFF]">
-            Welcome back to Monte Events
-          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-xs font-bold uppercase tracking-wider text-[#1A6BFF] dark:text-[#2B7FFF]">
+              Welcome back to Monte Events
+            </p>
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                apiStatus === 'online'
+                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                  : apiStatus === 'waking'
+                  ? 'bg-[#D6E6FF] dark:bg-[#13224A] text-[#0B2E8F] dark:text-[#D6E6FF]'
+                  : 'bg-[#D6E6FF]/80 dark:bg-[#13224A] text-[#0A1E5C]/75 dark:text-white/75'
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  apiStatus === 'online'
+                    ? 'bg-emerald-500'
+                    : apiStatus === 'waking'
+                    ? 'bg-[#1A6BFF] animate-pulse'
+                    : 'bg-[#2B7FFF]'
+                }`}
+              />
+              {apiStatus === 'online'
+                ? 'Live API'
+                : apiStatus === 'waking'
+                ? 'Waking up server…'
+                : 'Demo mode'}
+            </span>
+          </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0A1E5C] dark:text-white mt-0.5">
             Hey, {firstName}! Ready to plan?
           </h1>

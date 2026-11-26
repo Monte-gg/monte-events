@@ -3,6 +3,18 @@ import { MotionConfig } from 'motion/react';
 import { ThemeProvider } from './context/ThemeContext';
 import { supabase } from './lib/supabase';
 import {
+  ApiStatus,
+  addGuestOnApi,
+  checkApiHealth,
+  createMediaOnApi,
+  createRoomOnApi,
+  fetchMediaFromApi,
+  fetchRoomMessagesFromApi,
+  fetchRoomsFromApi,
+  sendRoomMessageOnApi,
+  toggleGuestPaymentOnApi,
+} from './lib/api';
+import {
   addGuestInSupabase,
   createEventInSupabase,
   fetchProfileFromSupabase,
@@ -60,6 +72,7 @@ function MonteAppContent() {
     connected: true,
     schemaReady: false,
   });
+  const [apiStatus, setApiStatus] = useState<ApiStatus>('waking');
   const [currentPage, setCurrentPage] = useState<AppPage>('dashboard');
   const [user, setUser] = useState<UserProfile>(INITIAL_USER_PROFILE);
   const [events, setEvents] = useState<MonteEvent[]>(INITIAL_EVENTS);
@@ -118,6 +131,58 @@ function MonteAppContent() {
     };
 
     void syncFromSupabase();
+
+    // Connect to Render Express API (graceful fallback to demo data if sleeping/unreachable)
+    const syncFromRenderApi = async () => {
+      const healthy = await checkApiHealth();
+      if (!mounted) return;
+      if (!healthy) {
+        setApiStatus('demo');
+        return;
+      }
+      setApiStatus('online');
+
+      const [apiRooms, apiMedia] = await Promise.all([
+        fetchRoomsFromApi(),
+        fetchMediaFromApi(),
+      ]);
+      if (!mounted) return;
+
+      if (apiRooms && apiRooms.length > 0) {
+        setEvents(apiRooms);
+        setActiveEventId((curr) =>
+          apiRooms.some((e) => e.id === curr) ? curr : apiRooms[0].id
+        );
+        setActiveChatEventId((curr) =>
+          curr && apiRooms.some((e) => e.id === curr) ? curr : apiRooms[0].id
+        );
+
+        // Fetch per-room messages in parallel
+        const msgEntries = await Promise.all(
+          apiRooms.map(async (r) => {
+            const msgs = await fetchRoomMessagesFromApi(r.id);
+            return [r.id, msgs] as const;
+          })
+        );
+        if (mounted) {
+          setMessagesByEvent((prev) => {
+            const next = { ...prev };
+            for (const [roomId, msgs] of msgEntries) {
+              if (msgs && msgs.length > 0) {
+                next[roomId] = msgs;
+              }
+            }
+            return next;
+          });
+        }
+      }
+
+      if (apiMedia && apiMedia.length > 0) {
+        setMedia(apiMedia);
+      }
+    };
+
+    void syncFromRenderApi();
 
     // Subscribe to live Realtime database changes across tabs/devices
     const channel = supabase
@@ -277,6 +342,25 @@ function MonteAppContent() {
       [newEvent.id]: [welcomeMsg],
     }));
     void createEventInSupabase(newEvent).then(() => sendMessageInSupabase(welcomeMsg));
+    void createRoomOnApi(newEvent).then((savedRoom) => {
+      if (!savedRoom) return;
+      setApiStatus('online');
+      setEvents((prev) =>
+        prev.map((ev) => (ev.id === newEvent.id ? savedRoom : ev))
+      );
+      setActiveEventId((curr) => (curr === newEvent.id ? savedRoom.id : curr));
+      setMessagesByEvent((prev) => {
+        const existing = prev[newEvent.id] || [welcomeMsg];
+        const next = { ...prev };
+        delete next[newEvent.id];
+        next[savedRoom.id] = existing.map((m) => ({ ...m, eventId: savedRoom.id }));
+        return next;
+      });
+      void sendRoomMessageOnApi(savedRoom.id, {
+        ...welcomeMsg,
+        eventId: savedRoom.id,
+      });
+    });
     setActiveEventId(newEvent.id);
     setActiveEventTab('guests');
     setCurrentPage('event-room');
@@ -294,6 +378,7 @@ function MonteAppContent() {
             const nextPaid = !g.paid;
             const paidAt = nextPaid ? 'Just now' : undefined;
             void toggleGuestPaidInSupabase(g.id, nextPaid, paidAt);
+            void toggleGuestPaymentOnApi(eventId, g.id, nextPaid);
             showToast(
               nextPaid
                 ? `${g.name} confirmed as Paid — In the Event!`
@@ -324,11 +409,29 @@ function MonteAppContent() {
       )
     );
     void addGuestInSupabase(eventId, guest);
+    void addGuestOnApi(eventId, guest).then((savedGuest) => {
+      if (!savedGuest) return;
+      setEvents((prev) =>
+        prev.map((ev) =>
+          ev.id === eventId
+            ? {
+                ...ev,
+                guests: ev.guests.map((g) =>
+                  g.id === guest.id ? savedGuest : g
+                ),
+              }
+            : ev
+        )
+      );
+    });
   };
 
   const handleUploadMedia = (_eventId: string, items: MediaItem[]) => {
     setMedia((prev) => [...items, ...prev]);
     void uploadMediaInSupabase(items);
+    items.forEach((item) => {
+      void createMediaOnApi(item);
+    });
   };
 
   const handleSendMessage = (
@@ -359,6 +462,7 @@ function MonteAppContent() {
       [eventId]: [...(prev[eventId] || []), newMsg],
     }));
     void sendMessageInSupabase(newMsg);
+    void sendRoomMessageOnApi(eventId, newMsg);
 
     // Also add chat media to event media vault & Supabase
     if (options?.media) {
@@ -510,6 +614,7 @@ function MonteAppContent() {
               events={events}
               media={media}
               notifications={notifications}
+              apiStatus={apiStatus}
               onMarkNotificationsRead={handleMarkNotificationsRead}
               onOpenEvent={handleOpenEvent}
               onNavigate={handleNavigate}
