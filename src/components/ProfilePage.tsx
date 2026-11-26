@@ -541,9 +541,12 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           >
             {/* Modal Header with ThemeToggle */}
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#13224A] px-5 py-4">
-              <h2 className="text-base sm:text-lg font-extrabold text-[#0A1E5C] dark:text-white">
-                Edit Profile
-              </h2>
+              <div className="flex items-center gap-2.5">
+                <img src="./favicon.svg" alt="Monte" className="h-7 w-7" />
+                <h2 className="text-base sm:text-lg font-extrabold text-[#0A1E5C] dark:text-white">
+                  Edit Profile
+                </h2>
+              </div>
               <div className="flex items-center gap-2">
                 <ThemeToggle compact />
                 <button

@@ -97,7 +97,8 @@ export const MediaLightbox: React.FC<MediaLightboxProps> = ({ item, onClose }) =
               {item.uploadedAt}
             </span>
           </div>
-          <span className="rounded-full bg-[#F0F6FF] dark:bg-[#1A2D5E] px-3 py-1 font-semibold text-[#1A6BFF] dark:text-[#2B7FFF]">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F0F6FF] dark:bg-[#1A2D5E] px-3 py-1 font-semibold text-[#1A6BFF] dark:text-[#2B7FFF]">
+            <img src="./favicon.svg" alt="" className="h-4 w-4" />
             Monte Media Vault
           </span>
         </div>
