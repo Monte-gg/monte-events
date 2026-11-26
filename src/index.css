@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-monte-ice text-monte-navy transition-colors duration-200;
+  }
+
+  .dark body {
+    @apply bg-monte-darkBg text-white;
+  }
+}
+
+/* Custom thin scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(26, 107, 255, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(26, 107, 255, 0.5);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(43, 127, 255, 0.35);
+}
+
+/* Graffiti bubble text effect for MONTE EVENTS */
+.monte-graffiti-text {
+  font-family: 'Bungee', 'Impact', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #ffffff;
+  -webkit-text-stroke: 2.5px #0B2E8F;
+  paint-order: stroke fill;
+  text-shadow:
+    0 3px 0 #0B2E8F,
+    2px 4px 0 #1A6BFF,
+    0 6px 14px rgba(11, 46, 143, 0.35);
+}
+
+.dark .monte-graffiti-text {
+  -webkit-text-stroke: 2.5px #1A6BFF;
+  text-shadow:
+    0 3px 0 #0B2E8F,
+    2px 4px 0 #2B7FFF,
+    0 6px 18px rgba(43, 127, 255, 0.45);
+}
+
+@keyframes floatSlow {
+  0%, 100% {
+    transform: translateY(0px) rotate(-2.5deg);
+  }
+  50% {
+    transform: translateY(-4px) rotate(-1.5deg);
+  }
+}
+
+.animate-float-logo {
+  animation: floatSlow 4.5s ease-in-out infinite;
+}
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUpFade 0.28s ease-out forwards;
+}
