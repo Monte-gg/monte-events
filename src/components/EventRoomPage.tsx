@@ -27,6 +27,7 @@ import {
   UserProfile,
 } from '../types';
 import { formatDateShort, formatKES } from '../data/sampleData';
+import { uploadFileToStorage } from '../lib/monteService';
 import { ThemeToggle } from './ThemeToggle';
 import { EventChatRoom } from './EventChatRoom';
 
@@ -146,28 +147,33 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
     onShowToast('Guest added to the room!');
   };
 
-  const handleMediaFiles = (files: FileList | null) => {
+  const handleMediaFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const newItems: MediaItem[] = Array.from(files).map((file, idx) => {
-      const isVideo = file.type.startsWith('video/');
-      const url = URL.createObjectURL(file);
-      return {
-        id: `up-${Date.now()}-${idx}`,
-        eventId: event.id,
-        eventName: event.name,
-        type: isVideo ? 'video' : 'photo',
-        url,
-        thumbnail: isVideo
-          ? 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=600&q=80'
-          : url,
-        title: file.name.replace(/\.[^/.]+$/, ''),
-        uploadedBy: user.name,
-        uploadedAt: 'Just now',
-        duration: isVideo ? '0:24' : undefined,
-      };
-    });
+    const fileArray = Array.from(files);
+    const newItems: MediaItem[] = await Promise.all(
+      fileArray.map(async (file, idx) => {
+        const isVideo = file.type.startsWith('video/');
+        const publicUrl = await uploadFileToStorage(file, `events/${event.id}`);
+        return {
+          id: `up-${Date.now()}-${idx}`,
+          eventId: event.id,
+          eventName: event.name,
+          type: isVideo ? 'video' : 'photo',
+          url: publicUrl,
+          thumbnail: isVideo
+            ? 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=600&q=80'
+            : publicUrl,
+          title: file.name.replace(/\.[^/.]+$/, ''),
+          uploadedBy: user.name,
+          uploadedAt: 'Just now',
+          duration: isVideo ? '0:24' : undefined,
+        };
+      })
+    );
     onUploadMedia(event.id, newItems);
-    onShowToast(`Uploaded ${newItems.length} file${newItems.length > 1 ? 's' : ''} to Event Media!`);
+    onShowToast(
+      `Uploaded ${newItems.length} file${newItems.length > 1 ? 's' : ''} to Supabase Media Vault!`
+    );
   };
 
   const handleAddSampleMedia = (type: 'photo' | 'video') => {

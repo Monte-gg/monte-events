@@ -25,6 +25,7 @@ import {
   UserProfile,
 } from '../types';
 import { EVENT_TYPES, formatDateShort, formatKES } from '../data/sampleData';
+import { uploadFileToStorage } from '../lib/monteService';
 import { MonteLogo } from './MonteLogo';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -32,6 +33,7 @@ interface ProfilePageProps {
   user: UserProfile;
   events: MonteEvent[];
   media: MediaItem[];
+  supabaseStatus: { connected: boolean; schemaReady: boolean };
   onUpdateProfile: (updated: UserProfile) => void;
   onOpenEvent: (eventId: string, tab?: EventRoomTab) => void;
   onSelectMedia: (item: MediaItem) => void;
@@ -50,6 +52,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   user,
   events,
   media,
+  supabaseStatus,
   onUpdateProfile,
   onOpenEvent,
   onSelectMedia,
@@ -92,10 +95,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
     onShowToast('Profile Updated');
   };
 
-  const handleAvatarFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
+    const url = await uploadFileToStorage(file, 'avatars');
     setDraft((prev) => ({ ...prev, avatarUrl: url }));
   };
 
@@ -377,6 +380,36 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
               </p>
             </div>
             <ThemeToggle />
+          </div>
+
+          {/* Supabase Backend Connection Status */}
+          <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-5 flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-extrabold text-[#0A1E5C] dark:text-white">
+                Supabase Cloud Sync
+              </h3>
+              <p className="text-xs text-[#0A1E5C]/65 dark:text-white/65 mt-0.5">
+                {supabaseStatus.connected
+                  ? supabaseStatus.schemaReady
+                    ? 'Connected to ibktiagimozgdixoepoq.supabase.co — live database & realtime active.'
+                    : 'Connected to ibktiagimozgdixoepoq.supabase.co — run supabase/schema.sql to enable persistent tables.'
+                  : 'Running in local preview mode.'}
+              </p>
+            </div>
+            <span
+              className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-extrabold ${
+                supabaseStatus.connected
+                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-[#D6E6FF] dark:bg-[#0B1A3A] text-[#0B2E8F] dark:text-[#D6E6FF]'
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  supabaseStatus.connected ? 'bg-emerald-500' : 'bg-[#1A6BFF]'
+                }`}
+              />
+              {supabaseStatus.connected ? 'Connected' : 'Local'}
+            </span>
           </div>
 
           {/* Notifications */}

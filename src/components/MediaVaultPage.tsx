@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Film, Image as ImageIcon, Play, UploadCloud } from 'lucide-react';
 import { MediaItem, MonteEvent, UserProfile } from '../types';
+import { uploadFileToStorage } from '../lib/monteService';
 import { ThemeToggle } from './ThemeToggle';
 
 interface MediaVaultPageProps {
@@ -33,28 +34,31 @@ export const MediaVaultPage: React.FC<MediaVaultPageProps> = ({
     });
   }, [media, kindFilter, eventFilter]);
 
-  const handleFiles = (files: FileList | null) => {
+  const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const targetEvent = events.find((e) => e.id === uploadTargetId) || events[0];
     if (!targetEvent) return;
-    const newItems: MediaItem[] = Array.from(files).map((file, idx) => {
-      const isVideo = file.type.startsWith('video/');
-      const url = URL.createObjectURL(file);
-      return {
-        id: `vault-${Date.now()}-${idx}`,
-        eventId: targetEvent.id,
-        eventName: targetEvent.name,
-        type: isVideo ? 'video' : 'photo',
-        url,
-        thumbnail: isVideo
-          ? 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=600&q=80'
-          : url,
-        title: file.name.replace(/\.[^/.]+$/, ''),
-        uploadedBy: user.name,
-        uploadedAt: 'Just now',
-        duration: isVideo ? '0:28' : undefined,
-      };
-    });
+    const fileArray = Array.from(files);
+    const newItems: MediaItem[] = await Promise.all(
+      fileArray.map(async (file, idx) => {
+        const isVideo = file.type.startsWith('video/');
+        const publicUrl = await uploadFileToStorage(file, `events/${targetEvent.id}`);
+        return {
+          id: `vault-${Date.now()}-${idx}`,
+          eventId: targetEvent.id,
+          eventName: targetEvent.name,
+          type: isVideo ? 'video' : 'photo',
+          url: publicUrl,
+          thumbnail: isVideo
+            ? 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=600&q=80'
+            : publicUrl,
+          title: file.name.replace(/\.[^/.]+$/, ''),
+          uploadedBy: user.name,
+          uploadedAt: 'Just now',
+          duration: isVideo ? '0:28' : undefined,
+        };
+      })
+    );
     onUploadMedia(targetEvent.id, newItems);
     onShowToast(`Added ${newItems.length} item(s) to ${targetEvent.name}!`);
   };

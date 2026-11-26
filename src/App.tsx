@@ -1,5 +1,19 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
+import { supabase } from './lib/supabase';
+import {
+  addGuestInSupabase,
+  createEventInSupabase,
+  fetchProfileFromSupabase,
+  loadAllMonteData,
+  sendMessageInSupabase,
+  signOutSupabase,
+  toggleGuestPaidInSupabase,
+  updateMessagePinInSupabase,
+  updateMessageReactionsInSupabase,
+  uploadMediaInSupabase,
+  upsertProfileInSupabase,
+} from './lib/monteService';
 import {
   INITIAL_EVENTS,
   INITIAL_MEDIA,
@@ -40,6 +54,11 @@ function getCurrentTimeLabel(): string {
 
 function MonteAppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [supabaseUserId, setSupabaseUserId] = useState<string | null>(null);
+  const [supabaseStatus, setSupabaseStatus] = useState({
+    connected: true,
+    schemaReady: false,
+  });
   const [currentPage, setCurrentPage] = useState<AppPage>('dashboard');
   const [user, setUser] = useState<UserProfile>(INITIAL_USER_PROFILE);
   const [events, setEvents] = useState<MonteEvent[]>(INITIAL_EVENTS);
@@ -48,6 +67,95 @@ function MonteAppContent() {
     useState<Record<string, ChatMessage[]>>(INITIAL_MESSAGES);
   const [notifications, setNotifications] =
     useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const syncFromSupabase = async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const uid = sessionData.session?.user?.id || null;
+        if (mounted && uid) {
+          setSupabaseUserId(uid);
+          const dbProfile = await fetchProfileFromSupabase(uid);
+          if (mounted && dbProfile) {
+            setUser((prev) => ({ ...prev, ...dbProfile }));
+          }
+        }
+        const synced = await loadAllMonteData(uid || undefined, {
+          events: INITIAL_EVENTS,
+          messagesByEvent: INITIAL_MESSAGES,
+          media: INITIAL_MEDIA,
+        });
+        if (!mounted) return;
+        setSupabaseStatus({
+          connected: synced.connected,
+          schemaReady: synced.schemaReady,
+        });
+        if (synced.events && synced.events.length > 0) {
+          setEvents(synced.events);
+          setActiveEventId((curr) =>
+            synced.events!.some((e) => e.id === curr) ? curr : synced.events![0].id
+          );
+          setActiveChatEventId((curr) =>
+            curr && synced.events!.some((e) => e.id === curr)
+              ? curr
+              : synced.events![0].id
+          );
+        }
+        if (synced.media && synced.media.length > 0) {
+          setMedia(synced.media);
+        }
+        if (synced.messagesByEvent && Object.keys(synced.messagesByEvent).length > 0) {
+          setMessagesByEvent(synced.messagesByEvent);
+        }
+      } catch {
+        if (mounted) {
+          setSupabaseStatus({ connected: false, schemaReady: false });
+        }
+      }
+    };
+
+    void syncFromSupabase();
+
+    // Subscribe to live Realtime database changes across tabs/devices
+    const channel = supabase
+      .channel('monte-events-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'event_messages' },
+        () => {
+          void syncFromSupabase();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'event_guests' },
+        () => {
+          void syncFromSupabase();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'events' },
+        () => {
+          void syncFromSupabase();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'event_media' },
+        () => {
+          void syncFromSupabase();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      void supabase.removeChannel(channel);
+    };
+  }, []);
 
   const [activeEventId, setActiveEventId] = useState<string>(INITIAL_EVENTS[0].id);
   const [activeEventTab, setActiveEventTab] = useState<EventRoomTab>('guests');
@@ -82,7 +190,15 @@ function MonteAppContent() {
     [events]
   );
 
-  const handleLogin = (payload?: { name?: string; email?: string; phone?: string }) => {
+  const handleLogin = (payload?: {
+    userId?: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+  }) => {
+    if (payload?.userId) {
+      setSupabaseUserId(payload.userId);
+    }
     if (payload?.name || payload?.email || payload?.phone) {
       setUser((prev) => {
         const nextName = payload.name || prev.name;
@@ -105,6 +221,8 @@ function MonteAppContent() {
   };
 
   const handleLogout = () => {
+    void signOutSupabase();
+    setSupabaseUserId(null);
     setIsAuthenticated(false);
     setCurrentPage('dashboard');
     showToast('Logged out successfully', 'info');
@@ -140,24 +258,24 @@ function MonteAppContent() {
 
   const handleCreateEvent = (newEvent: MonteEvent) => {
     setEvents((prev) => [newEvent, ...prev]);
+    const welcomeMsg: ChatMessage = {
+      id: `welcome-${Date.now()}`,
+      eventId: newEvent.id,
+      senderId: supabaseUserId || 'me',
+      senderName: user.name,
+      senderInitials: user.initials,
+      senderColor: '#1A6BFF',
+      isMe: true,
+      text: `Welcome to ${newEvent.name}! Meeting point & payment details will be pinned right here. Let’s Monte it!`,
+      timestamp: getCurrentTimeLabel(),
+      pinned: true,
+      reactions: [{ emoji: '🔥', users: [user.name] }],
+    };
     setMessagesByEvent((prev) => ({
       ...prev,
-      [newEvent.id]: [
-        {
-          id: `welcome-${Date.now()}`,
-          eventId: newEvent.id,
-          senderId: 'me',
-          senderName: user.name,
-          senderInitials: user.initials,
-          senderColor: '#1A6BFF',
-          isMe: true,
-          text: `Welcome to ${newEvent.name}! Meeting point & payment details will be pinned right here. Let’s Monte it!`,
-          timestamp: getCurrentTimeLabel(),
-          pinned: true,
-          reactions: [{ emoji: '🔥', users: [user.name] }],
-        },
-      ],
+      [newEvent.id]: [welcomeMsg],
     }));
+    void createEventInSupabase(newEvent).then(() => sendMessageInSupabase(welcomeMsg));
     setActiveEventId(newEvent.id);
     setActiveEventTab('guests');
     setCurrentPage('event-room');
@@ -173,6 +291,8 @@ function MonteAppContent() {
           guests: ev.guests.map((g) => {
             if (g.id !== guestId) return g;
             const nextPaid = !g.paid;
+            const paidAt = nextPaid ? 'Just now' : undefined;
+            void toggleGuestPaidInSupabase(g.id, nextPaid, paidAt);
             showToast(
               nextPaid
                 ? `${g.name} confirmed as Paid — In the Event!`
@@ -182,7 +302,7 @@ function MonteAppContent() {
             return {
               ...g,
               paid: nextPaid,
-              paidAt: nextPaid ? 'Just now' : undefined,
+              paidAt,
             };
           }),
         };
@@ -202,10 +322,12 @@ function MonteAppContent() {
           : ev
       )
     );
+    void addGuestInSupabase(eventId, guest);
   };
 
-  const handleUploadMedia = (eventId: string, items: MediaItem[]) => {
+  const handleUploadMedia = (_eventId: string, items: MediaItem[]) => {
     setMedia((prev) => [...items, ...prev]);
+    void uploadMediaInSupabase(items);
   };
 
   const handleSendMessage = (
@@ -235,25 +357,25 @@ function MonteAppContent() {
       ...prev,
       [eventId]: [...(prev[eventId] || []), newMsg],
     }));
+    void sendMessageInSupabase(newMsg);
 
-    // Also add chat media to event media vault
+    // Also add chat media to event media vault & Supabase
     if (options?.media) {
       const targetEvent = events.find((e) => e.id === eventId);
       if (targetEvent) {
-        setMedia((prev) => [
-          {
-            id: `chat-vault-${Date.now()}`,
-            eventId,
-            eventName: targetEvent.name,
-            type: options.media!.type,
-            url: options.media!.url,
-            thumbnail: options.media!.url,
-            title: options.media!.title || 'Shared in Chat',
-            uploadedBy: user.name,
-            uploadedAt: 'Just now',
-          },
-          ...prev,
-        ]);
+        const mediaItem: MediaItem = {
+          id: `chat-vault-${Date.now()}`,
+          eventId,
+          eventName: targetEvent.name,
+          type: options.media.type,
+          url: options.media.url,
+          thumbnail: options.media.url,
+          title: options.media.title || 'Shared in Chat',
+          uploadedBy: user.name,
+          uploadedAt: 'Just now',
+        };
+        setMedia((prev) => [mediaItem, ...prev]);
+        void uploadMediaInSupabase([mediaItem]);
       }
     }
 
@@ -287,6 +409,7 @@ function MonteAppContent() {
           ...prev,
           [eventId]: [...(prev[eventId] || []), reply1],
         }));
+        void sendMessageInSupabase(reply1);
 
         if (friend2 && friend2.id !== friend1.id && replies[1]) {
           setTypingByEvent((prev) => ({ ...prev, [eventId]: friend2.name }));
@@ -307,6 +430,7 @@ function MonteAppContent() {
               ...prev,
               [eventId]: [...(prev[eventId] || []), reply2],
             }));
+            void sendMessageInSupabase(reply2);
             setTypingByEvent((prev) => ({ ...prev, [eventId]: null }));
           }, 1500);
         } else {
@@ -338,6 +462,7 @@ function MonteAppContent() {
             : msg.reactions.map((r) =>
                 r.emoji === emoji ? { ...r, users: nextUsers } : r
               );
+        void updateMessageReactionsInSupabase(messageId, nextReactions);
         return { ...msg, reactions: nextReactions };
       }),
     }));
@@ -346,11 +471,19 @@ function MonteAppContent() {
   const handleTogglePin = (eventId: string, messageId: string) => {
     setMessagesByEvent((prev) => ({
       ...prev,
-      [eventId]: (prev[eventId] || []).map((msg) =>
-        msg.id === messageId ? { ...msg, pinned: !msg.pinned } : msg
-      ),
+      [eventId]: (prev[eventId] || []).map((msg) => {
+        if (msg.id !== messageId) return msg;
+        const nextPinned = !msg.pinned;
+        void updateMessagePinInSupabase(messageId, nextPinned);
+        return { ...msg, pinned: nextPinned };
+      }),
     }));
     showToast('Updated pinned messages', 'info');
+  };
+
+  const handleUpdateProfile = (updated: UserProfile) => {
+    setUser(updated);
+    void upsertProfileInSupabase(supabaseUserId, updated);
   };
 
   const handleMarkNotificationsRead = () => {
@@ -455,7 +588,8 @@ function MonteAppContent() {
               user={user}
               events={events}
               media={media}
-              onUpdateProfile={setUser}
+              supabaseStatus={supabaseStatus}
+              onUpdateProfile={handleUpdateProfile}
               onOpenEvent={handleOpenEvent}
               onSelectMedia={setLightboxMedia}
               onLogout={handleLogout}

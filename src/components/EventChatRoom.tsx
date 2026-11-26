@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { ChatMessage, Guest, MediaItem, MonteEvent, UserProfile } from '../types';
 import { SAMPLE_FRIENDS } from '../data/sampleData';
+import { uploadFileToStorage } from '../lib/monteService';
 import { ThemeToggle } from './ThemeToggle';
 
 const REACTION_EMOJIS = ['❤️', '😂', '🔥', '👍'];
@@ -117,11 +118,11 @@ export const EventChatRoom: React.FC<EventChatRoomProps> = ({
     setShowEmojiPicker(false);
   };
 
-  const handleFileAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const isVideo = file.type.startsWith('video/');
-    const url = URL.createObjectURL(file);
+    const url = await uploadFileToStorage(file, `chat/${event.id}`);
     onSendMessage(
       event.id,
       text.trim() || (isVideo ? `Shared a video: ${file.name}` : `Shared a photo: ${file.name}`),
