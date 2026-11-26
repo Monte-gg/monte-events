@@ -88,12 +88,33 @@ function MonteAppContent() {
     const syncFromSupabase = async () => {
       try {
         const { data: sessionData } = await supabase.auth.getSession();
-        const uid = sessionData.session?.user?.id || null;
-        if (mounted && uid) {
+        const sessionUser = sessionData.session?.user;
+        const uid = sessionUser?.id || null;
+        if (mounted && uid && sessionUser) {
           setSupabaseUserId(uid);
+          setIsAuthenticated(true);
           const dbProfile = await fetchProfileFromSupabase(uid);
-          if (mounted && dbProfile) {
-            setUser((prev) => ({ ...prev, ...dbProfile }));
+          if (mounted) {
+            if (dbProfile) {
+              setUser((prev) => ({ ...prev, ...dbProfile }));
+            } else {
+              const fallbackName =
+                (sessionUser.user_metadata?.full_name as string) ||
+                sessionUser.email?.split('@')[0] ||
+                'Monte Member';
+              const parts = fallbackName.split(' ');
+              const initials = (
+                (parts[0]?.[0] || 'M') + (parts[1]?.[0] || parts[0]?.[1] || 'E')
+              ).toUpperCase();
+              setUser((prev) => ({
+                ...prev,
+                name: fallbackName,
+                username: fallbackName.toLowerCase().replace(/[^a-z0-9_]/g, '') || 'member',
+                email: sessionUser.email || '',
+                phone: (sessionUser.user_metadata?.phone as string) || '',
+                initials,
+              }));
+            }
           }
         }
         const synced = await loadAllMonteData(uid || undefined, {
@@ -256,31 +277,32 @@ function MonteAppContent() {
     [events]
   );
 
-  const handleLogin = (payload?: {
-    userId?: string;
+  const handleLogin = (payload: {
+    userId: string;
     name?: string;
     email?: string;
     phone?: string;
   }) => {
-    if (payload?.userId) {
-      setSupabaseUserId(payload.userId);
-    }
-    if (payload?.name || payload?.email || payload?.phone) {
-      setUser((prev) => {
-        const nextName = payload.name || prev.name;
-        const parts = nextName.split(' ');
-        const initials = (
-          (parts[0]?.[0] || 'M') + (parts[1]?.[0] || parts[0]?.[1] || 'E')
-        ).toUpperCase();
-        return {
-          ...prev,
-          name: nextName,
-          email: payload.email || prev.email,
-          phone: payload.phone || prev.phone,
-          initials,
-        };
-      });
-    }
+    setSupabaseUserId(payload.userId);
+    const nextName =
+      payload.name || payload.email?.split('@')[0] || 'Monte Member';
+    const parts = nextName.split(' ');
+    const initials = (
+      (parts[0]?.[0] || 'M') + (parts[1]?.[0] || parts[0]?.[1] || 'E')
+    ).toUpperCase();
+    setUser((prev) => ({
+      ...prev,
+      name: nextName,
+      username: nextName.toLowerCase().replace(/[^a-z0-9_]/g, '') || 'member',
+      email: payload.email || '',
+      phone: payload.phone || '',
+      initials,
+    }));
+    void fetchProfileFromSupabase(payload.userId).then((dbProfile) => {
+      if (dbProfile) {
+        setUser((prev) => ({ ...prev, ...dbProfile }));
+      }
+    });
     setIsAuthenticated(true);
     setCurrentPage('dashboard');
     showToast('Welcome to MONTE EVENTS!');

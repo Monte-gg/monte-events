@@ -16,10 +16,11 @@ import { MonteLogo } from './MonteLogo';
 import { ThemeToggle } from './ThemeToggle';
 import { EASE_SKIPER, MagneticButton, SPRING_SNAPPY } from './MotionPrimitives';
 import { signInWithEmail, signUpWithEmail } from '../lib/monteService';
+import { supabase } from '../lib/supabase';
 
 interface AuthPageProps {
-  onLogin: (payload?: {
-    userId?: string;
+  onLogin: (payload: {
+    userId: string;
     name?: string;
     email?: string;
     phone?: string;
@@ -30,11 +31,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const [showSplash, setShowSplash] = useState(true);
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('brian.kamau@monteevents.co.ke');
-  const [password, setPassword] = useState('MonteEvents2026!');
-  const [phone, setPhone] = useState('+254 712 345 678');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
 
   // Subtle cursor-reactive parallax drift for splash decorative droplets
@@ -55,49 +57,74 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setAuthError(null);
     setAuthNotice(null);
 
     try {
       if (mode === 'signup') {
+        if (!name.trim()) {
+          setAuthError('Please enter your full name.');
+          return;
+        }
         const { data, error } = await signUpWithEmail({
-          name: name.trim() || 'Monte Member',
+          name: name.trim(),
           email: email.trim(),
           password,
           phone: phone.trim(),
         });
-        if (!error && data.user) {
+        if (error) {
+          setAuthError(error.message);
+          return;
+        }
+        if (data.session && data.user) {
           onLogin({
             userId: data.user.id,
-            name: name.trim() || undefined,
-            email: email.trim() || undefined,
+            name: name.trim(),
+            email: data.user.email || email.trim(),
             phone: phone.trim() || undefined,
           });
-          return;
+        } else {
+          setAuthNotice(
+            'Account created! Please check your email to confirm your account, then log in.'
+          );
+          setMode('login');
         }
       } else {
         const { data, error } = await signInWithEmail(email.trim(), password);
-        if (!error && data.user) {
+        if (error) {
+          setAuthError(error.message);
+          return;
+        }
+        if (data.user) {
           onLogin({
             userId: data.user.id,
             name: (data.user.user_metadata?.full_name as string) || undefined,
             email: data.user.email || undefined,
             phone: (data.user.user_metadata?.phone as string) || undefined,
           });
-          return;
         }
       }
-    } catch {
-      // Fall through to instant demo entry
+    } catch (err) {
+      setAuthError(
+        err instanceof Error ? err.message : 'Unable to authenticate right now.'
+      );
     } finally {
       setLoading(false);
     }
+  };
 
-    // Seamless fallback so the user can always enter immediately even without confirming email
-    onLogin({
-      name: mode === 'signup' && name.trim() ? name.trim() : undefined,
-      email: email.trim() || undefined,
-      phone: mode === 'signup' && phone.trim() ? phone.trim() : undefined,
+  const handleGoogleOAuth = async () => {
+    setAuthError(null);
+    setAuthNotice(null);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}${window.location.pathname}`,
+      },
     });
+    if (error) {
+      setAuthError(error.message);
+    }
   };
 
   if (showSplash) {
@@ -195,16 +222,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
               <span>Get Started</span>
               <ArrowRight className="h-4 w-4" />
             </MagneticButton>
-            <motion.button
-              type="button"
-              onClick={() => onLogin()}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
-              transition={SPRING_SNAPPY}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/40 bg-white/85 dark:bg-[#13224A] px-6 py-3.5 text-sm font-bold text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF] dark:hover:border-[#2B7FFF] hover:shadow-[0_0_0_3px_rgba(43,127,255,0.22)] transition-all"
-            >
-              Quick Demo Enter
-            </motion.button>
           </motion.div>
 
           {/* 5. Bottom Media-Vault Badge */}
@@ -366,6 +383,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
               </div>
             </div>
 
+            {authError && (
+              <p className="rounded-xl border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400">
+                {authError}
+              </p>
+            )}
+
             {authNotice && (
               <p className="rounded-xl bg-[#F0F6FF] dark:bg-[#0B1A3A] px-3 py-2 text-xs font-semibold text-[#1A6BFF] dark:text-[#2B7FFF]">
                 {authNotice}
@@ -378,7 +401,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
               className="w-full flex items-center justify-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] disabled:opacity-60 py-3.5 text-sm font-extrabold text-white shadow-monte transition active:scale-[0.99]"
             >
               <Sparkles className="h-4 w-4" />
-              {loading ? 'Connecting to Monte...' : 'Enter Monte'}
+              {loading
+                ? 'Connecting to Monte...'
+                : mode === 'signup'
+                ? 'Create Account'
+                : 'Enter Monte'}
               <ArrowRight className="h-4 w-4" />
             </button>
           </form>
@@ -396,7 +423,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <button
               type="button"
-              onClick={() => onLogin()}
+              onClick={handleGoogleOAuth}
               className="flex items-center justify-center gap-2 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/50 dark:bg-[#0B1A3A] px-4 py-2.5 text-xs font-bold text-[#0A1E5C] dark:text-white hover:bg-[#D6E6FF]/50 dark:hover:bg-[#1A2D5E] transition"
             >
               <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
@@ -422,7 +449,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
             <button
               type="button"
-              onClick={() => onLogin()}
+              onClick={() =>
+                setAuthNotice(
+                  'Use Email & Password or Google sign-in to access your Monte account.'
+                )
+              }
               className="flex items-center justify-center gap-2 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/50 dark:bg-[#0B1A3A] px-4 py-2.5 text-xs font-bold text-[#0A1E5C] dark:text-white hover:bg-[#D6E6FF]/50 dark:hover:bg-[#1A2D5E] transition"
             >
               <svg className="h-4 w-4 text-[#1A6BFF] dark:text-[#2B7FFF]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

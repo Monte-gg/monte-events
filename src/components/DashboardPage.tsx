@@ -126,7 +126,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 ? 'Live API'
                 : apiStatus === 'waking'
                 ? 'Waking up server…'
-                : 'Demo mode'}
+                : 'Offline mode'}
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0A1E5C] dark:text-white mt-0.5">
