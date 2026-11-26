@@ -29,10 +29,16 @@ export async function signUpWithEmail(payload: {
   password: string;
   phone?: string;
 }) {
+  const redirectUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}${window.location.pathname}?verified=true`
+      : 'https://monte-gg.github.io/monte-events/?verified=true';
+
   return supabase.auth.signUp({
     email: payload.email,
     password: payload.password,
     options: {
+      emailRedirectTo: redirectUrl,
       data: {
         full_name: payload.name,
         phone: payload.phone || '',

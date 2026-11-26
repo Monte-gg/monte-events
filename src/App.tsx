@@ -48,6 +48,7 @@ import {
   UserProfile,
 } from './types';
 import { AuthPage } from './components/AuthPage';
+import { EmailVerifiedPage } from './components/EmailVerifiedPage';
 import { AppShell } from './components/AppShell';
 import { DashboardPage } from './components/DashboardPage';
 import { CreateRoomPage } from './components/CreateRoomPage';
@@ -66,8 +67,21 @@ function getCurrentTimeLabel(): string {
   });
 }
 
+function detectEmailVerifiedFromUrl(): boolean {
+  if (typeof window === 'undefined') return false;
+  const search = new URLSearchParams(window.location.search);
+  const hash = window.location.hash || '';
+  if (search.get('verified') === 'true') return true;
+  if (search.get('type') === 'signup' || search.get('type') === 'email') return true;
+  if (hash.includes('type=signup') || hash.includes('type=email')) return true;
+  return false;
+}
+
 function MonteAppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showEmailVerified, setShowEmailVerified] = useState<boolean>(() =>
+    detectEmailVerifiedFromUrl()
+  );
   const [supabaseUserId, setSupabaseUserId] = useState<string | null>(null);
   const [supabaseStatus, setSupabaseStatus] = useState({
     connected: true,
@@ -681,9 +695,27 @@ function MonteAppContent() {
 
   const activeEvent = events.find((e) => e.id === activeEventId) || events[0];
 
+  const handleContinueAfterVerified = () => {
+    setShowEmailVerified(false);
+    if (typeof window !== 'undefined') {
+      const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
+    if (isAuthenticated) {
+      setCurrentPage('dashboard');
+      showToast('Welcome to MONTE EVENTS!');
+    }
+  };
+
   return (
     <>
-      {!isAuthenticated ? (
+      {showEmailVerified ? (
+        <EmailVerifiedPage
+          email={user.email || undefined}
+          isSignedIn={isAuthenticated}
+          onContinue={handleContinueAfterVerified}
+        />
+      ) : !isAuthenticated ? (
         <AuthPage onLogin={handleLogin} onShowToast={showToast} />
       ) : (
         <AppShell
