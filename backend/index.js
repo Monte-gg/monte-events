@@ -206,6 +206,20 @@ app.post('/api/rooms', async (req, res) => {
   }
 });
 
+// DELETE /api/rooms/:id — permanently delete an event room and its guests/messages
+app.delete('/api/rooms/:id', async (req, res) => {
+  if (!requireSupabase(res)) return;
+  try {
+    const { id } = req.params;
+    const { error } = await supabase.from('rooms').delete().eq('id', id);
+    if (error) throw error;
+    res.json({ ok: true, deletedId: id });
+  } catch (err) {
+    console.error('DELETE /api/rooms/:id failed:', err);
+    res.status(500).json({ error: err.message || 'Failed to delete room' });
+  }
+});
+
 // GET /api/rooms/:id/guests — list guests in a room
 app.get('/api/rooms/:id/guests', async (req, res) => {
   if (!requireSupabase(res)) return;

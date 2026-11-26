@@ -182,31 +182,37 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   </button>
                 </div>
                 <div className="max-h-72 overflow-y-auto divide-y divide-[#D6E6FF]/60 dark:divide-[#2B7FFF]/15">
-                  {notifications.map((n) => (
-                    <button
-                      key={n.id}
-                      type="button"
-                      onClick={() => {
-                        setShowNotifs(false);
-                        if (n.eventId) onOpenEvent(n.eventId);
-                      }}
-                      className={`w-full text-left px-4 py-3 hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E] transition ${
-                        !n.read ? 'bg-[#F0F6FF]/70 dark:bg-[#1A2D5E]/50' : ''
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-[#0A1E5C] dark:text-white">
-                          {n.title}
-                        </span>
-                        <span className="text-[11px] text-[#0A1E5C]/50 dark:text-white/50">
-                          {n.time}
-                        </span>
-                      </div>
-                      <p className="mt-0.5 text-xs text-[#0A1E5C]/70 dark:text-white/70 line-clamp-2">
-                        {n.body}
-                      </p>
-                    </button>
-                  ))}
+                  {notifications.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-xs text-[#0A1E5C]/60 dark:text-white/60">
+                      You’re all caught up — no notifications yet.
+                    </div>
+                  ) : (
+                    notifications.map((n) => (
+                      <button
+                        key={n.id}
+                        type="button"
+                        onClick={() => {
+                          setShowNotifs(false);
+                          if (n.eventId) onOpenEvent(n.eventId);
+                        }}
+                        className={`w-full text-left px-4 py-3 hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E] transition ${
+                          !n.read ? 'bg-[#F0F6FF]/70 dark:bg-[#1A2D5E]/50' : ''
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-[#0A1E5C] dark:text-white">
+                            {n.title}
+                          </span>
+                          <span className="text-[11px] text-[#0A1E5C]/50 dark:text-white/50">
+                            {n.time}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-xs text-[#0A1E5C]/70 dark:text-white/70 line-clamp-2">
+                          {n.body}
+                        </p>
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
             )}
@@ -224,11 +230,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             className="hidden sm:flex h-10 w-10 items-center justify-center rounded-full overflow-hidden ring-2 ring-[#1A6BFF] bg-[#1A6BFF] text-white font-bold text-xs hover:scale-105 transition"
             title="View Profile"
           >
-            <img
-              src={user.avatarUrl}
-              alt={user.name}
-              className="h-full w-full object-cover"
-            />
+            {user.avatarUrl ? (
+              <img
+                src={user.avatarUrl}
+                alt={user.name}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span>{user.initials}</span>
+            )}
           </button>
         </div>
       </div>
@@ -360,17 +370,35 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
 
         {filteredEvents.length === 0 ? (
-          <div className="rounded-3xl border border-dashed border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] p-10 text-center">
+          <div className="rounded-3xl border border-dashed border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] p-10 text-center space-y-3">
             <p className="text-sm font-bold text-[#0A1E5C] dark:text-white">
-              No events match &ldquo;{searchQuery}&rdquo;
+              {events.length === 0
+                ? 'No event rooms created yet'
+                : `No events match “${searchQuery}”`}
             </p>
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              className="mt-3 rounded-xl bg-[#1A6BFF] px-4 py-2 text-xs font-bold text-white"
-            >
-              Clear Search
-            </button>
+            <p className="text-xs text-[#0A1E5C]/65 dark:text-white/65 max-w-sm mx-auto">
+              {events.length === 0
+                ? 'Start fresh by creating your first event room — invite friends, split costs, and chat in one place.'
+                : 'Try a different keyword or clear the search filter.'}
+            </p>
+            {events.length === 0 ? (
+              <button
+                type="button"
+                onClick={() => onNavigate('create')}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-5 py-2.5 text-xs font-extrabold text-white shadow-monte transition"
+              >
+                <Plus className="h-4 w-4" />
+                Create New Room
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="rounded-xl bg-[#1A6BFF] px-4 py-2 text-xs font-bold text-white"
+              >
+                Clear Search
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -514,6 +542,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </button>
         </div>
 
+        {media.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] p-8 text-center">
+            <p className="text-sm font-bold text-[#0A1E5C] dark:text-white">
+              Your Media Vault is empty
+            </p>
+            <p className="mt-1 text-xs text-[#0A1E5C]/65 dark:text-white/65">
+              Photos and videos uploaded in your event rooms will appear here.
+            </p>
+          </div>
+        ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
           {media.slice(0, 6).map((item) => (
             <motion.button
@@ -555,6 +593,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </motion.button>
           ))}
         </div>
+        )}
       </section>
     </div>
   );

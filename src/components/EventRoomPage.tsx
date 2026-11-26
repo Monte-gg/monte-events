@@ -14,9 +14,11 @@ import {
   Plus,
   Search,
   Share2,
+  Trash2,
   UploadCloud,
   Users,
   Wallet,
+  X,
 } from 'lucide-react';
 import {
   ChatMessage,
@@ -46,6 +48,7 @@ interface EventRoomPageProps {
   user: UserProfile;
   typingUser?: string | null;
   onBack: () => void;
+  onDeleteEvent: (eventId: string) => void;
   onToggleGuestPaid: (eventId: string, guestId: string) => void;
   onAddGuestToEvent: (eventId: string, guest: Guest) => void;
   onUploadMedia: (eventId: string, items: MediaItem[]) => void;
@@ -72,6 +75,7 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
   user,
   typingUser,
   onBack,
+  onDeleteEvent,
   onToggleGuestPaid,
   onAddGuestToEvent,
   onUploadMedia,
@@ -87,6 +91,7 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
   const [newGuestName, setNewGuestName] = useState('');
   const [newGuestPhone, setNewGuestPhone] = useState('');
   const [showAddGuestRow, setShowAddGuestRow] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [justConfirmedId, setJustConfirmedId] = useState<string | null>(null);
 
   const handleTogglePaidWithFlash = (guest: Guest) => {
@@ -193,31 +198,6 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
     );
   };
 
-  const handleAddSampleMedia = (type: 'photo' | 'video') => {
-    const sampleUrl =
-      type === 'video'
-        ? 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=900&q=80'
-        : 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=900&q=80';
-    onUploadMedia(event.id, [
-      {
-        id: `sample-${Date.now()}`,
-        eventId: event.id,
-        eventName: event.name,
-        type,
-        url: sampleUrl,
-        thumbnail: sampleUrl,
-        title:
-          type === 'video'
-            ? `${event.name} Highlight Clip`
-            : `${event.name} Squad Moment`,
-        uploadedBy: user.name,
-        uploadedAt: 'Just now',
-        duration: type === 'video' ? '0:35' : undefined,
-      },
-    ]);
-    onShowToast(`Added sample ${type} to ${event.name}!`);
-  };
-
   const budgetEntries = Object.entries(event.budgetBreakdown) as [
     keyof MonteEvent['budgetBreakdown'],
     number,
@@ -235,10 +215,77 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
           <ArrowLeft className="h-4 w-4" />
           Back to Rooms
         </button>
-        <div className="hidden sm:block">
-          <ThemeToggle />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setDeleteConfirmOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-red-400/40 bg-red-500/10 hover:bg-red-500/20 px-3.5 py-2 text-xs font-extrabold text-red-600 dark:text-red-400 transition"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete Room
+          </button>
+          <div className="hidden sm:block">
+            <ThemeToggle />
+          </div>
         </div>
       </div>
+
+      {/* Delete Room Confirmation Modal */}
+      {deleteConfirmOpen && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-[#0A1430]/75 backdrop-blur-sm p-4"
+          onClick={() => setDeleteConfirmOpen(false)}
+        >
+          <div
+            className="animate-slide-up w-full max-w-md rounded-3xl border border-red-400/40 bg-white dark:bg-[#13224A] p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/15 text-red-600 dark:text-red-400">
+                  <Trash2 className="h-5 w-5" />
+                </span>
+                <h2 className="text-base font-extrabold text-[#0A1E5C] dark:text-white">
+                  Delete Room?
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmOpen(false)}
+                className="rounded-full p-1.5 text-[#0A1E5C]/60 dark:text-white/60 hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="text-xs sm:text-sm text-[#0A1E5C]/75 dark:text-white/75 leading-relaxed">
+              Are you sure you want to permanently delete{' '}
+              <span className="font-extrabold text-[#0A1E5C] dark:text-white">
+                {event.name}
+              </span>
+              ? All guests, payment records, and chat messages in this room will be removed.
+            </p>
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmOpen(false)}
+                className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-4 py-2.5 text-xs sm:text-sm font-bold text-[#0A1E5C] dark:text-white hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteConfirmOpen(false);
+                  onDeleteEvent(event.id);
+                }}
+                className="rounded-xl bg-red-600 hover:bg-red-700 px-5 py-2.5 text-xs sm:text-sm font-extrabold text-white shadow-sm transition"
+              >
+                Delete Room
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Event Cover Header */}
       <div
@@ -672,23 +719,7 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
                 className="inline-flex items-center gap-2 rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-5 py-2.5 text-xs sm:text-sm font-extrabold text-white shadow-sm transition"
               >
                 <UploadCloud className="h-4 w-4" />
-                Choose Files
-              </button>
-              <button
-                type="button"
-                onClick={() => handleAddSampleMedia('photo')}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-[#F0F6FF] dark:bg-[#0B1A3A] px-4 py-2.5 text-xs font-bold text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF]"
-              >
-                <ImageIcon className="h-3.5 w-3.5 text-[#1A6BFF]" />
-                + Sample Photo
-              </button>
-              <button
-                type="button"
-                onClick={() => handleAddSampleMedia('video')}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-[#F0F6FF] dark:bg-[#0B1A3A] px-4 py-2.5 text-xs font-bold text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF]"
-              >
-                <Film className="h-3.5 w-3.5 text-[#1A6BFF]" />
-                + Sample Video
+                Choose Photos or Videos
               </button>
             </div>
           </div>

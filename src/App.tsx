@@ -9,6 +9,7 @@ import {
   createMediaOnApi,
   createRoomOnApi,
   deleteAccountOnApi,
+  deleteRoomOnApi,
   fetchMediaFromApi,
   fetchRoomMessagesFromApi,
   fetchRoomsFromApi,
@@ -18,6 +19,7 @@ import {
 import {
   addGuestInSupabase,
   createEventInSupabase,
+  deleteEventInSupabase,
   fetchProfileFromSupabase,
   loadAllMonteData,
   sendMessageInSupabase,
@@ -34,8 +36,6 @@ import {
   INITIAL_MESSAGES,
   INITIAL_NOTIFICATIONS,
   INITIAL_USER_PROFILE,
-  SAMPLE_FRIENDS,
-  pickAutoReplies,
 } from './data/sampleData';
 import {
   AppPage,
@@ -157,11 +157,7 @@ function MonteAppContent() {
         if (sessionUser) {
           await applySupabaseSessionUser(sessionUser);
         }
-        const synced = await loadAllMonteData(sessionUser?.id || undefined, {
-          events: INITIAL_EVENTS,
-          messagesByEvent: INITIAL_MESSAGES,
-          media: INITIAL_MEDIA,
-        });
+        const synced = await loadAllMonteData(sessionUser?.id || undefined);
         if (!mounted) return;
         setSupabaseStatus({
           connected: synced.connected,
@@ -299,12 +295,10 @@ function MonteAppContent() {
     };
   }, []);
 
-  const [activeEventId, setActiveEventId] = useState<string>(INITIAL_EVENTS[0].id);
+  const [activeEventId, setActiveEventId] = useState<string>('');
   const [activeEventTab, setActiveEventTab] = useState<EventRoomTab>('guests');
-  const [activeChatEventId, setActiveChatEventId] = useState<string | null>(
-    INITIAL_EVENTS[0].id
-  );
-  const [typingByEvent, setTypingByEvent] = useState<Record<string, string | null>>({});
+  const [activeChatEventId, setActiveChatEventId] = useState<string | null>(null);
+  const [typingByEvent] = useState<Record<string, string | null>>({});
 
   const [lightboxMedia, setLightboxMedia] = useState<MediaItem | null>(null);
   const [toasts, setToasts] = useState<ToastData[]>([]);
@@ -465,6 +459,32 @@ function MonteAppContent() {
     showToast(`Room "${newEvent.name}" created!`);
   };
 
+  const handleDeleteEvent = (eventId: string) => {
+    const target = events.find((e) => e.id === eventId);
+    setEvents((prev) => prev.filter((e) => e.id !== eventId));
+    setMessagesByEvent((prev) => {
+      const next = { ...prev };
+      delete next[eventId];
+      return next;
+    });
+    setMedia((prev) => prev.filter((m) => m.eventId !== eventId));
+    if (activeEventId === eventId) {
+      setActiveEventId('');
+      if (currentPage === 'event-room') {
+        setCurrentPage('rooms');
+      }
+    }
+    if (activeChatEventId === eventId) {
+      setActiveChatEventId(null);
+    }
+    void deleteRoomOnApi(eventId);
+    void deleteEventInSupabase(eventId);
+    showToast(
+      target ? `Deleted room "${target.name}"` : 'Room deleted',
+      'info'
+    );
+  };
+
   const handleToggleGuestPaid = (eventId: string, guestId: string) => {
     setEvents((prev) =>
       prev.map((ev) => {
@@ -579,67 +599,8 @@ function MonteAppContent() {
         };
         setMedia((prev) => [mediaItem, ...prev]);
         void uploadMediaInSupabase([mediaItem]);
+        void createMediaOnApi(mediaItem);
       }
-    }
-
-    // Trigger 1-2 realistic auto-replies from friends in this event
-    const targetEvent = events.find((e) => e.id === eventId);
-    const poolFriends =
-      targetEvent && targetEvent.guests.length > 0
-        ? targetEvent.guests
-        : SAMPLE_FRIENDS.slice(0, 3);
-
-    const replies = pickAutoReplies(text);
-    const friend1 = poolFriends[0];
-    const friend2 = poolFriends[1] || poolFriends[0];
-
-    if (friend1) {
-      setTypingByEvent((prev) => ({ ...prev, [eventId]: friend1.name }));
-      setTimeout(() => {
-        const reply1: ChatMessage = {
-          id: `auto-1-${Date.now()}`,
-          eventId,
-          senderId: friend1.id,
-          senderName: friend1.name,
-          senderInitials: friend1.initials,
-          senderColor: friend1.avatarColor,
-          isMe: false,
-          text: replies[0],
-          timestamp: getCurrentTimeLabel(),
-          reactions: [],
-        };
-        setMessagesByEvent((prev) => ({
-          ...prev,
-          [eventId]: [...(prev[eventId] || []), reply1],
-        }));
-        void sendMessageInSupabase(reply1);
-
-        if (friend2 && friend2.id !== friend1.id && replies[1]) {
-          setTypingByEvent((prev) => ({ ...prev, [eventId]: friend2.name }));
-          setTimeout(() => {
-            const reply2: ChatMessage = {
-              id: `auto-2-${Date.now()}`,
-              eventId,
-              senderId: friend2.id,
-              senderName: friend2.name,
-              senderInitials: friend2.initials,
-              senderColor: friend2.avatarColor,
-              isMe: false,
-              text: replies[1],
-              timestamp: getCurrentTimeLabel(),
-              reactions: [],
-            };
-            setMessagesByEvent((prev) => ({
-              ...prev,
-              [eventId]: [...(prev[eventId] || []), reply2],
-            }));
-            void sendMessageInSupabase(reply2);
-            setTypingByEvent((prev) => ({ ...prev, [eventId]: null }));
-          }, 1500);
-        } else {
-          setTypingByEvent((prev) => ({ ...prev, [eventId]: null }));
-        }
-      }, 1100);
     }
   };
 
@@ -751,6 +712,7 @@ function MonteAppContent() {
             <MyRoomsPage
               events={events}
               onOpenEvent={handleOpenEvent}
+              onDeleteEvent={handleDeleteEvent}
               onCreateRoom={() => setCurrentPage('create')}
             />
           )}
@@ -765,6 +727,7 @@ function MonteAppContent() {
               user={user}
               typingUser={typingByEvent[activeEvent.id] || null}
               onBack={() => setCurrentPage('rooms')}
+              onDeleteEvent={handleDeleteEvent}
               onToggleGuestPaid={handleToggleGuestPaid}
               onAddGuestToEvent={handleAddGuestToEvent}
               onUploadMedia={handleUploadMedia}

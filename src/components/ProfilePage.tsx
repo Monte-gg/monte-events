@@ -141,12 +141,16 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           <div className="relative -mt-14 sm:-mt-16 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div className="flex items-end gap-4">
               <div className="relative">
-                <div className="h-24 w-24 sm:h-28 sm:w-28 rounded-3xl overflow-hidden border-4 border-white dark:border-[#13224A] bg-[#1A6BFF] shadow-lg">
-                  <img
-                    src={user.avatarUrl}
-                    alt={user.name}
-                    className="h-full w-full object-cover"
-                  />
+                <div className="h-24 w-24 sm:h-28 sm:w-28 rounded-3xl overflow-hidden border-4 border-white dark:border-[#13224A] bg-[#1A6BFF] text-white flex items-center justify-center text-2xl font-extrabold shadow-lg">
+                  {user.avatarUrl ? (
+                    <img
+                      src={user.avatarUrl}
+                      alt={user.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span>{user.initials}</span>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -197,7 +201,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { label: 'Events Created', value: events.length },
-              { label: 'Events Attended', value: events.length + 5 },
+              { label: 'Events Attended', value: events.length },
               { label: 'Guests Invited', value: totalGuestsInvited },
               { label: 'Total Media', value: media.length },
             ].map((st) => (

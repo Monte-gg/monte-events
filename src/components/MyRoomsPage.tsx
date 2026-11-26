@@ -5,6 +5,7 @@ import {
   MessageCircle,
   Plus,
   Search,
+  Trash2,
   Users,
 } from 'lucide-react';
 import { EventRoomTab, MonteEvent } from '../types';
@@ -16,12 +17,14 @@ import { SPRING_SNAPPY, ScrollProgressBar } from './MotionPrimitives';
 interface MyRoomsPageProps {
   events: MonteEvent[];
   onOpenEvent: (eventId: string, tab?: EventRoomTab) => void;
+  onDeleteEvent: (eventId: string) => void;
   onCreateRoom: () => void;
 }
 
 export const MyRoomsPage: React.FC<MyRoomsPageProps> = ({
   events,
   onOpenEvent,
+  onDeleteEvent,
   onCreateRoom,
 }) => {
   const [search, setSearch] = useState('');
@@ -112,20 +115,42 @@ export const MyRoomsPage: React.FC<MyRoomsPageProps> = ({
         </div>
       </div>
 
-      {/* Rooms Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        {filtered.map((event) => {
-          const paid = event.guests.filter((g) => g.paid).length;
-          const total = event.guests.length;
-          const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
+      {/* Rooms Grid or Empty State */}
+      {filtered.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] p-12 text-center space-y-3">
+          <p className="text-base font-extrabold text-[#0A1E5C] dark:text-white">
+            {events.length === 0
+              ? 'No event rooms yet'
+              : 'No rooms match your filter'}
+          </p>
+          <p className="text-xs sm:text-sm text-[#0A1E5C]/65 dark:text-white/65 max-w-md mx-auto">
+            {events.length === 0
+              ? 'Create your first roadtrip, birthday, or beach getaway room to start inviting guests and tracking budgets.'
+              : 'Try clearing your search or selecting All.'}
+          </p>
+          <button
+            type="button"
+            onClick={onCreateRoom}
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-5 py-2.5 text-xs sm:text-sm font-extrabold text-white shadow-monte transition"
+          >
+            <Plus className="h-4 w-4" />
+            Create Your First Room
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          {filtered.map((event) => {
+            const paid = event.guests.filter((g) => g.paid).length;
+            const total = event.guests.length;
+            const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
 
-          return (
-            <motion.div
-              key={event.id}
-              whileHover={{ y: -3 }}
-              transition={SPRING_SNAPPY}
-              className="group overflow-hidden rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#13224A] shadow-sm hover:shadow-monte dark:hover:shadow-monte-dark transition-shadow flex flex-col"
-            >
+            return (
+              <motion.div
+                key={event.id}
+                whileHover={{ y: -3 }}
+                transition={SPRING_SNAPPY}
+                className="group overflow-hidden rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#13224A] shadow-sm hover:shadow-monte dark:hover:shadow-monte-dark transition-shadow flex flex-col"
+              >
               <div
                 className={`relative h-40 bg-gradient-to-br ${event.coverGradient} overflow-hidden`}
               >
@@ -182,6 +207,7 @@ export const MyRoomsPage: React.FC<MyRoomsPageProps> = ({
                     type="button"
                     onClick={() => onOpenEvent(event.id, 'chat')}
                     className="relative rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-[#F0F6FF] dark:bg-[#0B1A3A] px-3.5 py-2.5 text-xs font-bold text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF]"
+                    title="Open Event Chat"
                   >
                     <MessageCircle className="h-4 w-4 text-[#1A6BFF] dark:text-[#2B7FFF]" />
                     {event.unreadCount > 0 && (
@@ -190,12 +216,30 @@ export const MyRoomsPage: React.FC<MyRoomsPageProps> = ({
                       </span>
                     )}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Permanently delete "${event.name}" and its guests/chat?`
+                        )
+                      ) {
+                        onDeleteEvent(event.id);
+                      }
+                    }}
+                    className="rounded-xl border border-red-400/35 bg-red-500/10 hover:bg-red-500/20 px-3 py-2.5 text-red-600 dark:text-red-400 transition"
+                    title="Delete Room"
+                    aria-label={`Delete ${event.name}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
             </motion.div>
           );
         })}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

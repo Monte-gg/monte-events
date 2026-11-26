@@ -118,14 +118,17 @@ export const AppShell: React.FC<AppShellProps> = ({
             onClick={() => onNavigate('profile')}
             className="w-full flex items-center gap-3 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-[#F0F6FF]/80 dark:bg-[#13224A] p-2.5 text-left hover:border-[#1A6BFF]/50 transition"
           >
-            <img
-              src={user.avatarUrl}
-              alt={user.name}
-              className="h-10 w-10 rounded-full object-cover ring-2 ring-[#1A6BFF]/40"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = 'none';
-              }}
-            />
+            <div className="h-10 w-10 shrink-0 rounded-full overflow-hidden ring-2 ring-[#1A6BFF]/40 bg-[#1A6BFF] text-white flex items-center justify-center text-xs font-extrabold">
+              {user.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.name}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span>{user.initials}</span>
+              )}
+            </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-bold text-[#0A1E5C] dark:text-white">
                 {user.name}
@@ -161,11 +164,15 @@ export const AppShell: React.FC<AppShellProps> = ({
               className="h-8 w-8 rounded-full overflow-hidden ring-2 ring-[#1A6BFF]/50 bg-[#1A6BFF] text-white flex items-center justify-center text-xs font-bold"
               aria-label="Open profile"
             >
-              <img
-                src={user.avatarUrl}
-                alt={user.name}
-                className="h-full w-full object-cover"
-              />
+              {user.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.name}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span>{user.initials}</span>
+              )}
             </button>
           </div>
         </header>

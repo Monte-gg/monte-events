@@ -14,7 +14,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import { EVENT_TYPES, SAMPLE_FRIENDS, formatKES } from '../data/sampleData';
+import { EVENT_TYPES, formatKES } from '../data/sampleData';
 import { AnimatePresence, motion } from 'motion/react';
 import { EventType, Guest, MonteEvent } from '../types';
 import { ThemeToggle } from './ThemeToggle';
@@ -102,8 +102,6 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
   // Step 3
   const [totalBudget, setTotalBudget] = useState<number>(60000);
   const [maxGuests, setMaxGuests] = useState<number>(10);
-  const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>(['f1', 'f2', 'f3']);
-  const [friendSearch, setFriendSearch] = useState('');
   const [manualGuests, setManualGuests] = useState<
     { id: string; name: string; phone: string; email: string }[]
   >([]);
@@ -122,23 +120,6 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
     if (!maxGuests || maxGuests < 1) return 0;
     return Math.round(totalBudget / maxGuests);
   }, [totalBudget, maxGuests]);
-
-  const filteredFriends = useMemo(() => {
-    const q = friendSearch.trim().toLowerCase();
-    if (!q) return SAMPLE_FRIENDS;
-    return SAMPLE_FRIENDS.filter(
-      (f) =>
-        f.name.toLowerCase().includes(q) ||
-        f.username.toLowerCase().includes(q) ||
-        f.phone.toLowerCase().includes(q)
-    );
-  }, [friendSearch]);
-
-  const toggleFriend = (id: string) => {
-    setSelectedFriendIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  };
 
   const handleAddManualGuest = () => {
     if (!manualName.trim()) return;
@@ -171,37 +152,23 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
     const finalLocation = location.trim() || 'Nairobi, KE';
     const preset = COVER_PRESETS[eventType];
 
-    const guests: Guest[] = [
-      ...SAMPLE_FRIENDS.filter((f) => selectedFriendIds.includes(f.id)).map((f) => ({
-        id: `g-${Date.now()}-${f.id}`,
-        friendId: f.id,
-        name: f.name,
-        phone: f.phone,
-        email: f.email,
-        initials: f.initials,
-        avatarColor: f.avatarColor,
+    const guests: Guest[] = manualGuests.map((m, idx) => {
+      const parts = m.name.split(' ');
+      const initials = (
+        (parts[0]?.[0] || 'G') + (parts[1]?.[0] || parts[0]?.[1] || '')
+      ).toUpperCase();
+      return {
+        id: `g-m-${Date.now()}-${idx}`,
+        name: m.name,
+        phone: m.phone,
+        email: m.email,
+        initials,
+        avatarColor: '#1A6BFF',
         amount: costPerPerson,
         paid: false,
-        online: f.online,
-      })),
-      ...manualGuests.map((m, idx) => {
-        const parts = m.name.split(' ');
-        const initials = (
-          (parts[0]?.[0] || 'G') + (parts[1]?.[0] || parts[0]?.[1] || '')
-        ).toUpperCase();
-        return {
-          id: `g-m-${Date.now()}-${idx}`,
-          name: m.name,
-          phone: m.phone,
-          email: m.email,
-          initials,
-          avatarColor: '#1A6BFF',
-          amount: costPerPerson,
-          paid: false,
-          online: false,
-        };
-      }),
-    ];
+        online: false,
+      };
+    });
 
     const newEvent: MonteEvent = {
       id: `evt-${Date.now()}`,
@@ -609,72 +576,6 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
                   ))}
                 </div>
               )}
-            </div>
-
-            {/* Invite Friends List */}
-            <div className="space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <h3 className="text-sm font-extrabold text-[#0A1E5C] dark:text-white">
-                  Invite Friends ({selectedFriendIds.length} selected)
-                </h3>
-                <div className="relative sm:w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#1A6BFF]" />
-                  <input
-                    type="text"
-                    value={friendSearch}
-                    onChange={(e) => setFriendSearch(e.target.value)}
-                    placeholder="Search friends..."
-                    className="w-full rounded-full border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] pl-8 pr-3 py-1.5 text-xs text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
-                {filteredFriends.map((friend) => {
-                  const checked = selectedFriendIds.includes(friend.id);
-                  return (
-                    <button
-                      key={friend.id}
-                      type="button"
-                      onClick={() => toggleFriend(friend.id)}
-                      className={`flex items-center justify-between rounded-2xl border p-3 text-left transition ${
-                        checked
-                          ? 'border-[#1A6BFF] bg-[#F0F6FF] dark:bg-[#1A2D5E]'
-                          : 'border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#0B1A3A] hover:border-[#1A6BFF]/50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div
-                          className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-extrabold text-white"
-                          style={{ backgroundColor: friend.avatarColor }}
-                        >
-                          {friend.initials}
-                          {friend.online && (
-                            <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-[#0B1A3A]" />
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-xs sm:text-sm font-bold text-[#0A1E5C] dark:text-white">
-                            {friend.name}
-                          </p>
-                          <p className="truncate text-[11px] text-[#0A1E5C]/60 dark:text-white/60">
-                            {friend.phone}
-                          </p>
-                        </div>
-                      </div>
-                      <span
-                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${
-                          checked
-                            ? 'border-[#1A6BFF] bg-[#1A6BFF] text-white'
-                            : 'border-[#D6E6FF] dark:border-[#2B7FFF]/40'
-                        }`}
-                      >
-                        {checked && <Check className="h-3.5 w-3.5 stroke-[3]" />}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
             </div>
 
             {/* Invite Link Box */}

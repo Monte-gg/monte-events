@@ -175,11 +175,23 @@ export const MediaVaultPage: React.FC<MediaVaultPageProps> = ({
         </select>
       </div>
 
-      {/* Animated Reflow & Cross-Fade Grid */}
-      <motion.div
-        layout
-        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"
-      >
+      {/* Animated Reflow & Cross-Fade Grid or Empty State */}
+      {filtered.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] p-12 text-center space-y-2">
+          <p className="text-sm font-extrabold text-[#0A1E5C] dark:text-white">
+            No media uploaded yet
+          </p>
+          <p className="text-xs text-[#0A1E5C]/65 dark:text-white/65">
+            {events.length === 0
+              ? 'Create an event room first, then upload photos and videos from your events.'
+              : 'Select an event above and upload photos or videos to populate your vault.'}
+          </p>
+        </div>
+      ) : (
+        <motion.div
+          layout
+          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"
+        >
         <AnimatePresence mode="popLayout">
           {filtered.map((item) => (
             <motion.button
@@ -229,6 +241,7 @@ export const MediaVaultPage: React.FC<MediaVaultPageProps> = ({
           ))}
         </AnimatePresence>
       </motion.div>
+      )}
     </div>
   );
 };

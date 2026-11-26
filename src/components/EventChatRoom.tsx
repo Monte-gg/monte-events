@@ -16,7 +16,6 @@ import {
   X,
 } from 'lucide-react';
 import { ChatMessage, Guest, MediaItem, MonteEvent, UserProfile } from '../types';
-import { SAMPLE_FRIENDS } from '../data/sampleData';
 import { uploadFileToStorage } from '../lib/monteService';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -69,6 +68,9 @@ export const EventChatRoom: React.FC<EventChatRoomProps> = ({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [showAddFriend, setShowAddFriend] = useState(false);
+  const [inviteName, setInviteName] = useState('');
+  const [invitePhone, setInvitePhone] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
   const [replyTo, setReplyTo] = useState<{
     id: string;
     senderName: string;
@@ -101,11 +103,6 @@ export const EventChatRoom: React.FC<EventChatRoomProps> = ({
         m.senderName.toLowerCase().includes(q)
     );
   }, [messages, searchQuery]);
-
-  const availableFriendsToAdd = useMemo(() => {
-    const existingNames = new Set(event.guests.map((g) => g.name.toLowerCase()));
-    return SAMPLE_FRIENDS.filter((f) => !existingNames.has(f.name.toLowerCase()));
-  }, [event.guests]);
 
   const handleSend = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -140,21 +137,30 @@ export const EventChatRoom: React.FC<EventChatRoomProps> = ({
     e.target.value = '';
   };
 
-  const handleQuickInviteFriend = (friend: (typeof SAMPLE_FRIENDS)[number]) => {
+  const handleAddMemberSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteName.trim()) return;
+    const parts = inviteName.trim().split(/\s+/);
+    const initials = (
+      (parts[0]?.[0] || 'G') + (parts[1]?.[0] || parts[0]?.[1] || '')
+    ).toUpperCase();
     const newGuest: Guest = {
-      id: `g-add-${Date.now()}-${friend.id}`,
-      friendId: friend.id,
-      name: friend.name,
-      phone: friend.phone,
-      email: friend.email,
-      initials: friend.initials,
-      avatarColor: friend.avatarColor,
+      id: `g-add-${Date.now()}`,
+      name: inviteName.trim(),
+      phone: invitePhone.trim(),
+      email: inviteEmail.trim() || undefined,
+      initials,
+      avatarColor: '#1A6BFF',
       amount: event.costPerPerson,
       paid: false,
-      online: friend.online,
+      online: false,
     };
     onAddGuestToEvent(event.id, newGuest);
-    onShowToast(`${friend.name} added to ${event.name}!`);
+    onShowToast(`${newGuest.name} added to ${event.name}!`);
+    setInviteName('');
+    setInvitePhone('');
+    setInviteEmail('');
+    setShowAddFriend(false);
   };
 
   return (
@@ -755,44 +761,60 @@ export const EventChatRoom: React.FC<EventChatRoomProps> = ({
               </div>
             </div>
 
-            {availableFriendsToAdd.length === 0 ? (
-              <p className="text-xs text-[#0A1E5C]/70 dark:text-white/70 py-4 text-center">
-                All your Monte friends are already in this event room!
-              </p>
-            ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {availableFriendsToAdd.map((f) => (
-                  <div
-                    key={f.id}
-                    className="flex items-center justify-between rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] p-3"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div
-                        className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-extrabold text-white"
-                        style={{ backgroundColor: f.avatarColor }}
-                      >
-                        {f.initials}
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-[#0A1E5C] dark:text-white">
-                          {f.name}
-                        </p>
-                        <p className="text-[11px] text-[#0A1E5C]/60 dark:text-white/60">
-                          {f.phone}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleQuickInviteFriend(f)}
-                      className="rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-3 py-1.5 text-xs font-bold text-white"
-                    >
-                      + Invite
-                    </button>
-                  </div>
-                ))}
+            <form onSubmit={handleAddMemberSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-1">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={inviteName}
+                  onChange={(e) => setInviteName(e.target.value)}
+                  placeholder="Guest name"
+                  className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3.5 py-2 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                />
               </div>
-            )}
+              <div>
+                <label className="block text-xs font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-1">
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={invitePhone}
+                  onChange={(e) => setInvitePhone(e.target.value)}
+                  placeholder="+254 7XX XXX XXX"
+                  className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3.5 py-2 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-1">
+                  Email (optional)
+                </label>
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="friend@example.com"
+                  className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3.5 py-2 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddFriend(false)}
+                  className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-4 py-2 text-xs font-bold text-[#0A1E5C] dark:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-5 py-2 text-xs font-extrabold text-white"
+                >
+                  Add to Room
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

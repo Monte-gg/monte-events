@@ -422,6 +422,14 @@ export async function createEventInSupabase(event: MonteEvent) {
   }
 }
 
+export async function deleteEventInSupabase(eventId: string) {
+  try {
+    await supabase.from('events').delete().eq('id', eventId);
+  } catch {
+    // Graceful fallback
+  }
+}
+
 export async function toggleGuestPaidInSupabase(
   guestId: string,
   paid: boolean,
