@@ -8,6 +8,7 @@ import {
   checkApiHealth,
   createMediaOnApi,
   createRoomOnApi,
+  deleteAccountOnApi,
   fetchMediaFromApi,
   fetchRoomMessagesFromApi,
   fetchRoomsFromApi,
@@ -357,6 +358,24 @@ function MonteAppContent() {
     setIsAuthenticated(false);
     setCurrentPage('dashboard');
     showToast('Signed out successfully', 'info');
+  };
+
+  const handleDeleteAccount = async (): Promise<{ ok: boolean; error?: string }> => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) {
+      return { ok: false, error: 'You must be signed in to delete your account.' };
+    }
+    const res = await deleteAccountOnApi(accessToken);
+    if (!res.ok) {
+      return res;
+    }
+    await signOutSupabase();
+    setSupabaseUserId(null);
+    setIsAuthenticated(false);
+    setCurrentPage('dashboard');
+    showToast('Your account has been permanently deleted.', 'info');
+    return { ok: true };
   };
 
   const handleOpenEvent = (eventId: string, tab: EventRoomTab = 'guests') => {
@@ -764,6 +783,7 @@ function MonteAppContent() {
               onOpenEvent={handleOpenEvent}
               onSelectMedia={setLightboxMedia}
               onLogout={handleLogout}
+              onDeleteAccount={handleDeleteAccount}
               onShowToast={showToast}
             />
           )}

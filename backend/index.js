@@ -474,6 +474,47 @@ app.post('/api/media', async (req, res) => {
   }
 });
 
+// DELETE /api/account — securely delete the authenticated user's own account
+app.delete('/api/account', async (req, res) => {
+  if (!requireSupabase(res)) return;
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7).trim()
+      : '';
+
+    if (!token) {
+      return res
+        .status(401)
+        .json({ error: 'Missing Authorization bearer token' });
+    }
+
+    const { data: userData, error: userErr } = await supabase.auth.getUser(
+      token
+    );
+    if (userErr || !userData?.user) {
+      return res.status(401).json({ error: 'Invalid or expired session token' });
+    }
+
+    const userId = userData.user.id;
+
+    // Best-effort cleanup of profile row if table exists
+    try {
+      await supabase.from('profiles').delete().eq('id', userId);
+    } catch {
+      // Ignore if profiles table is not present
+    }
+
+    const { error: deleteErr } = await supabase.auth.admin.deleteUser(userId);
+    if (deleteErr) throw deleteErr;
+
+    res.json({ ok: true, deletedUserId: userId });
+  } catch (err) {
+    console.error('DELETE /api/account failed:', err);
+    res.status(500).json({ error: err.message || 'Failed to delete account' });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(
     `[monte-events-api] listening on http://0.0.0.0:${PORT} (CORS: ${Array.from(

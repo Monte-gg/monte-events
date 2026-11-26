@@ -14,6 +14,7 @@ import {
   Play,
   Shield,
   Smartphone,
+  Trash2,
   User,
   X,
 } from 'lucide-react';
@@ -40,6 +41,7 @@ interface ProfilePageProps {
   onOpenEvent: (eventId: string, tab?: EventRoomTab) => void;
   onSelectMedia: (item: MediaItem) => void;
   onLogout: () => void;
+  onDeleteAccount: () => Promise<{ ok: boolean; error?: string }>;
   onShowToast: (msg: string) => void;
 }
 
@@ -59,10 +61,15 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   onOpenEvent,
   onSelectMedia,
   onLogout,
+  onDeleteAccount,
   onShowToast,
 }) => {
   const [activeTab, setActiveTab] = useState<'about' | 'events' | 'media' | 'settings'>('about');
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Settings local toggles
   const [notifPush, setNotifPush] = useState(true);
@@ -533,11 +540,119 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           <button
             type="button"
             onClick={onLogout}
-            className="w-full flex items-center justify-center gap-2 rounded-2xl border border-red-400/40 bg-red-500/10 hover:bg-red-500/20 py-3.5 text-sm font-extrabold text-red-600 dark:text-red-400 transition"
+            className="w-full flex items-center justify-center gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-white dark:bg-[#13224A] hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E] py-3.5 text-sm font-extrabold text-[#0A1E5C] dark:text-white transition"
           >
-            <LogOut className="h-4 w-4" />
+            <LogOut className="h-4 w-4 text-[#1A6BFF] dark:text-[#2B7FFF]" />
             Sign Out
           </button>
+
+          {/* Danger Zone: Delete Account */}
+          <div className="rounded-3xl border border-red-400/35 bg-red-500/5 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-extrabold text-red-600 dark:text-red-400">
+                Danger Zone
+              </h3>
+              <p className="text-xs text-[#0A1E5C]/70 dark:text-white/70 mt-0.5">
+                Permanently delete your MONTE EVENTS account and profile data. This cannot be undone.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteConfirmText('');
+                setDeleteError(null);
+                setDeleteOpen(true);
+              }}
+              className="shrink-0 inline-flex items-center justify-center gap-2 rounded-2xl border border-red-500/40 bg-red-600 hover:bg-red-700 px-5 py-2.5 text-xs sm:text-sm font-extrabold text-white shadow-sm transition active:scale-95"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete Account
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE ACCOUNT CONFIRMATION MODAL */}
+      {deleteOpen && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-[#0A1430]/75 backdrop-blur-sm p-4"
+          onClick={() => !deleting && setDeleteOpen(false)}
+        >
+          <div
+            className="animate-slide-up w-full max-w-md rounded-3xl border border-red-400/40 bg-white dark:bg-[#13224A] p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/15 text-red-600 dark:text-red-400">
+                  <Trash2 className="h-5 w-5" />
+                </span>
+                <h2 className="text-base font-extrabold text-[#0A1E5C] dark:text-white">
+                  Delete Account
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <ThemeToggle compact />
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={() => setDeleteOpen(false)}
+                  className="rounded-full p-1.5 text-[#0A1E5C]/60 dark:text-white/60 hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            <p className="text-xs sm:text-sm text-[#0A1E5C]/75 dark:text-white/75 leading-relaxed">
+              This will permanently remove your account (<span className="font-bold">{user.email}</span>) from MONTE EVENTS. Type <span className="font-extrabold text-red-600 dark:text-red-400">DELETE</span> below to confirm.
+            </p>
+
+            <input
+              type="text"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder='Type "DELETE" to confirm'
+              disabled={deleting}
+              className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3.5 py-2.5 text-sm font-bold text-[#0A1E5C] dark:text-white focus:border-red-500 focus:outline-none"
+            />
+
+            {deleteError && (
+              <p className="rounded-xl border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400">
+                {deleteError}
+              </p>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => setDeleteOpen(false)}
+                className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-4 py-2.5 text-xs sm:text-sm font-bold text-[#0A1E5C] dark:text-white hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleting || deleteConfirmText.trim() !== 'DELETE'}
+                onClick={async () => {
+                  setDeleting(true);
+                  setDeleteError(null);
+                  const result = await onDeleteAccount();
+                  if (!result.ok) {
+                    setDeleteError(result.error || 'Could not delete account.');
+                    setDeleting(false);
+                  } else {
+                    setDeleteOpen(false);
+                    setDeleting(false);
+                  }
+                }}
+                className="rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-45 px-5 py-2.5 text-xs sm:text-sm font-extrabold text-white shadow-sm transition"
+              >
+                {deleting ? 'Deleting…' : 'Permanently Delete'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

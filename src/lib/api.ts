@@ -358,3 +358,27 @@ export async function createMediaOnApi(
     return null;
   }
 }
+
+export async function deleteAccountOnApi(
+  accessToken: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/account`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, error: body.error || `Request failed (${res.status})` };
+    }
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Unable to reach server',
+    };
+  }
+}
