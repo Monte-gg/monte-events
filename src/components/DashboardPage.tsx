@@ -23,7 +23,15 @@ import {
   UserProfile,
 } from '../types';
 import { formatDateShort, formatKES } from '../data/sampleData';
+import { motion } from 'motion/react';
 import { ThemeToggle } from './ThemeToggle';
+import {
+  CountUpNumber,
+  SPRING_POP,
+  SPRING_SNAPPY,
+  ScrollProgressBar,
+  SpotlightCard,
+} from './MotionPrimitives';
 
 interface DashboardPageProps {
   user: UserProfile;
@@ -196,61 +204,83 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
       </div>
 
-      {/* Stats Row */}
+      {/* Stats Row with Count-Up + Cursor Spotlight */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
-        {[
-          {
-            label: 'Upcoming Events',
-            value: stats.upcomingEvents.toString(),
-            sub: 'Active event rooms',
-            icon: Calendar,
-          },
-          {
-            label: 'Total Guests',
-            value: stats.totalGuests.toString(),
-            sub: 'Invited across rooms',
-            icon: Users,
-          },
-          {
-            label: 'Budget Used',
-            value: formatKES(stats.totalBudgetCollected),
-            sub: 'Collected via M-Pesa',
-            icon: Wallet,
-          },
-          {
-            label: 'Paid Guests',
-            value: `${stats.paidGuests} / ${stats.totalGuests}`,
-            sub: `${
-              stats.totalGuests
-                ? Math.round((stats.paidGuests / stats.totalGuests) * 100)
-                : 0
-            }% confirmed`,
-            icon: CheckCircle2,
-          },
-        ].map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <div
-              key={stat.label}
-              className="rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#13224A] p-4 sm:p-5 shadow-sm hover:border-[#1A6BFF]/50 transition"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#0A1E5C]/65 dark:text-white/65">
-                  {stat.label}
-                </span>
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F0F6FF] dark:bg-[#1A2D5E] text-[#1A6BFF] dark:text-[#2B7FFF]">
-                  <Icon className="h-4 w-4" />
-                </span>
-              </div>
-              <p className="mt-2.5 text-xl sm:text-2xl font-extrabold text-[#0A1E5C] dark:text-white tracking-tight">
-                {stat.value}
-              </p>
-              <p className="mt-1 text-xs font-medium text-[#1A6BFF] dark:text-[#2B7FFF]">
-                {stat.sub}
-              </p>
-            </div>
-          );
-        })}
+        <SpotlightCard>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-[#0A1E5C]/65 dark:text-white/65">
+              Upcoming Events
+            </span>
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F0F6FF] dark:bg-[#1A2D5E] text-[#1A6BFF] dark:text-[#2B7FFF]">
+              <Calendar className="h-4 w-4" />
+            </span>
+          </div>
+          <p className="mt-2.5 text-xl sm:text-2xl font-extrabold text-[#0A1E5C] dark:text-white tracking-tight">
+            <CountUpNumber value={stats.upcomingEvents} durationMs={550} />
+          </p>
+          <p className="mt-1 text-xs font-medium text-[#1A6BFF] dark:text-[#2B7FFF]">
+            Active event rooms
+          </p>
+        </SpotlightCard>
+
+        <SpotlightCard>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-[#0A1E5C]/65 dark:text-white/65">
+              Total Guests
+            </span>
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F0F6FF] dark:bg-[#1A2D5E] text-[#1A6BFF] dark:text-[#2B7FFF]">
+              <Users className="h-4 w-4" />
+            </span>
+          </div>
+          <p className="mt-2.5 text-xl sm:text-2xl font-extrabold text-[#0A1E5C] dark:text-white tracking-tight">
+            <CountUpNumber value={stats.totalGuests} durationMs={560} />
+          </p>
+          <p className="mt-1 text-xs font-medium text-[#1A6BFF] dark:text-[#2B7FFF]">
+            Invited across rooms
+          </p>
+        </SpotlightCard>
+
+        <SpotlightCard>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-[#0A1E5C]/65 dark:text-white/65">
+              Budget Used
+            </span>
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F0F6FF] dark:bg-[#1A2D5E] text-[#1A6BFF] dark:text-[#2B7FFF]">
+              <Wallet className="h-4 w-4" />
+            </span>
+          </div>
+          <p className="mt-2.5 text-xl sm:text-2xl font-extrabold text-[#0A1E5C] dark:text-white tracking-tight">
+            <CountUpNumber
+              value={stats.totalBudgetCollected}
+              durationMs={600}
+              formatter={(v) => formatKES(v)}
+            />
+          </p>
+          <p className="mt-1 text-xs font-medium text-[#1A6BFF] dark:text-[#2B7FFF]">
+            Collected via M-Pesa
+          </p>
+        </SpotlightCard>
+
+        <SpotlightCard>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-[#0A1E5C]/65 dark:text-white/65">
+              Paid Guests
+            </span>
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F0F6FF] dark:bg-[#1A2D5E] text-[#1A6BFF] dark:text-[#2B7FFF]">
+              <CheckCircle2 className="h-4 w-4" />
+            </span>
+          </div>
+          <p className="mt-2.5 text-xl sm:text-2xl font-extrabold text-[#0A1E5C] dark:text-white tracking-tight">
+            <CountUpNumber value={stats.paidGuests} durationMs={560} /> /{' '}
+            <CountUpNumber value={stats.totalGuests} durationMs={560} />
+          </p>
+          <p className="mt-1 text-xs font-medium text-[#1A6BFF] dark:text-[#2B7FFF]">
+            {stats.totalGuests
+              ? Math.round((stats.paidGuests / stats.totalGuests) * 100)
+              : 0}
+            % confirmed
+          </p>
+        </SpotlightCard>
       </div>
 
       {/* Big CTA Banner: + Create New Room */}
@@ -322,9 +352,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 totalCount > 0 ? Math.round((paidCount / totalCount) * 100) : 0;
 
               return (
-                <div
+                <motion.div
                   key={event.id}
-                  className="group overflow-hidden rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#13224A] shadow-sm hover:shadow-monte dark:hover:shadow-monte-dark transition-all flex flex-col"
+                  whileHover={{ y: -3 }}
+                  transition={SPRING_SNAPPY}
+                  className="group overflow-hidden rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#13224A] shadow-sm hover:shadow-monte dark:hover:shadow-monte-dark transition-shadow flex flex-col"
                 >
                   {/* Cover image / gradient */}
                   <div
@@ -397,12 +429,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                           {paidCount}/{totalCount} Paid ({paidPct}%)
                         </span>
                       </div>
-                      <div className="h-2.5 w-full rounded-full bg-[#D6E6FF] dark:bg-[#0A1430] overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-gradient-to-r from-[#1A6BFF] to-[#2B7FFF] transition-all duration-500"
-                          style={{ width: `${paidPct}%` }}
-                        />
-                      </div>
+                      <ScrollProgressBar percent={paidPct} />
                     </div>
 
                     {/* Actions */}
@@ -430,7 +457,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                       </button>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
@@ -460,9 +487,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
           {media.slice(0, 6).map((item) => (
-            <button
+            <motion.button
               key={item.id}
               type="button"
+              whileHover={{ y: -3 }}
+              whileTap={{ scale: 0.97 }}
+              transition={SPRING_SNAPPY}
               onClick={() => onSelectMedia(item)}
               className="group relative aspect-[4/5] overflow-hidden rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-gradient-to-br from-[#0B2E8F] to-[#1A6BFF] text-left shadow-sm"
             >
@@ -474,9 +504,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <div className="absolute inset-0 bg-gradient-to-t from-[#0A1430]/85 via-transparent to-transparent" />
               {item.type === 'video' && (
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#1A6BFF]/90 text-white shadow-lg ring-4 ring-white/30 group-hover:scale-110 transition">
+                  <motion.span
+                    whileHover={{ scale: 1.18 }}
+                    transition={SPRING_POP}
+                    className="flex h-11 w-11 items-center justify-center rounded-full bg-[#1A6BFF]/90 text-white shadow-lg ring-4 ring-white/30 group-hover:scale-110 transition-transform"
+                  >
                     <Play className="h-5 w-5 fill-white ml-0.5" />
-                  </span>
+                  </motion.span>
                 </div>
               )}
               {item.type === 'video' && item.duration && (
@@ -489,7 +523,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 <p className="truncate text-xs font-bold text-white">{item.title}</p>
                 <p className="truncate text-[10px] text-white/75">{item.eventName}</p>
               </div>
-            </button>
+            </motion.button>
           ))}
         </div>
       </section>

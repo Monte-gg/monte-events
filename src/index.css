@@ -89,3 +89,39 @@
 .animate-slide-up {
   animation: slideUpFade 0.28s ease-out forwards;
 }
+
+@keyframes shimmerSweep {
+  0% {
+    transform: translateX(-120%) skewX(-18deg);
+  }
+  100% {
+    transform: translateX(240%) skewX(-18deg);
+  }
+}
+
+.monte-shimmer-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.35),
+    transparent
+  );
+  transform: translateX(-120%) skewX(-18deg);
+  pointer-events: none;
+}
+
+.monte-shimmer-btn:hover::after {
+  animation: shimmerSweep 0.75s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float-logo,
+  .animate-slide-up,
+  .monte-shimmer-btn::after {
+    animation: none !important;
+  }
+}

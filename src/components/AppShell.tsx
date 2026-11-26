@@ -8,8 +8,10 @@ import {
   User,
 } from 'lucide-react';
 import { AppPage, UserProfile } from '../types';
+import { motion } from 'motion/react';
 import { MonteLogo } from './MonteLogo';
 import { ThemeToggle } from './ThemeToggle';
+import { SPRING_SNAPPY } from './MotionPrimitives';
 
 interface AppShellProps {
   currentPage: AppPage;
@@ -47,12 +49,12 @@ export const AppShell: React.FC<AppShellProps> = ({
 
   return (
     <div
-      className={`bg-[#F0F6FF] dark:bg-[#0A1430] text-[#0A1E5C] dark:text-white flex ${
+      className={`bg-[#F0F6FF] dark:bg-[#0A1430] text-[#0A1E5C] dark:text-white flex transition-colors duration-300 ${
         currentPage === 'chats' ? 'h-dvh overflow-hidden' : 'min-h-screen'
       }`}
     >
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-64 xl:w-72 lg:fixed lg:inset-y-0 lg:left-0 z-30 border-r border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#0B1A3A] px-4 py-5">
+      <aside className="hidden lg:flex lg:flex-col lg:w-64 xl:w-72 lg:fixed lg:inset-y-0 lg:left-0 z-30 border-r border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#0B1A3A] px-4 py-5 transition-colors duration-300">
         <div
           onClick={() => onNavigate('dashboard')}
           className="cursor-pointer flex items-center justify-center pb-5 border-b border-[#D6E6FF] dark:border-[#2B7FFF]/15"
@@ -69,19 +71,26 @@ export const AppShell: React.FC<AppShellProps> = ({
                 key={item.id}
                 type="button"
                 onClick={() => onNavigate(item.id)}
-                className={`w-full flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-bold transition-all ${
+                className={`relative w-full flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-bold transition-colors ${
                   active
-                    ? 'bg-[#1A6BFF] text-white shadow-monte'
+                    ? 'text-white'
                     : 'text-[#0A1E5C]/75 dark:text-white/75 hover:bg-[#F0F6FF] dark:hover:bg-[#13224A] hover:text-[#1A6BFF] dark:hover:text-[#2B7FFF]'
                 }`}
               >
-                <span className="flex items-center gap-3">
+                {active && (
+                  <motion.span
+                    layoutId="sidebar-active-pill"
+                    transition={SPRING_SNAPPY}
+                    className="absolute inset-0 rounded-2xl bg-[#1A6BFF] shadow-monte"
+                  />
+                )}
+                <span className="relative z-10 flex items-center gap-3">
                   <Icon className="h-5 w-5" />
                   <span>{item.label}</span>
                 </span>
                 {item.badge && item.badge > 0 ? (
                   <span
-                    className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-extrabold ${
+                    className={`relative z-10 flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-extrabold ${
                       active
                         ? 'bg-white text-[#1A6BFF]'
                         : 'bg-[#1A6BFF] text-white dark:bg-[#2B7FFF]'
@@ -173,7 +182,7 @@ export const AppShell: React.FC<AppShellProps> = ({
       </div>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white/95 dark:bg-[#0B1A3A]/95 backdrop-blur-lg px-2 py-1.5">
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white/95 dark:bg-[#0B1A3A]/95 backdrop-blur-lg px-2 py-1.5 transition-colors duration-300">
         <div className="grid grid-cols-6 gap-0.5 max-w-lg mx-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -183,13 +192,20 @@ export const AppShell: React.FC<AppShellProps> = ({
                 key={item.id}
                 type="button"
                 onClick={() => onNavigate(item.id)}
-                className={`relative flex flex-col items-center justify-center rounded-xl py-1.5 px-1 transition ${
+                className={`relative flex flex-col items-center justify-center rounded-xl py-1.5 px-1 transition-colors ${
                   active
-                    ? 'text-[#1A6BFF] dark:text-[#2B7FFF] bg-[#F0F6FF] dark:bg-[#13224A]'
+                    ? 'text-[#1A6BFF] dark:text-[#2B7FFF]'
                     : 'text-[#0A1E5C]/60 dark:text-white/60 hover:text-[#1A6BFF]'
                 }`}
               >
-                <div className="relative">
+                {active && (
+                  <motion.span
+                    layoutId="mobile-nav-pill"
+                    transition={SPRING_SNAPPY}
+                    className="absolute inset-0 rounded-xl bg-[#F0F6FF] dark:bg-[#13224A]"
+                  />
+                )}
+                <div className="relative z-10">
                   <Icon className="h-5 w-5" />
                   {item.badge && item.badge > 0 ? (
                     <span className="absolute -top-1.5 -right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#1A6BFF] dark:bg-[#2B7FFF] px-1 text-[10px] font-extrabold text-white">
@@ -197,7 +213,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                     </span>
                   ) : null}
                 </div>
-                <span className="mt-0.5 text-[10px] font-bold truncate max-w-full">
+                <span className="relative z-10 mt-0.5 text-[10px] font-bold truncate max-w-full">
                   {item.label}
                 </span>
               </button>

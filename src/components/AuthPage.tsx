@@ -11,8 +11,10 @@ import {
   Sparkles,
   User,
 } from 'lucide-react';
+import { motion, useMotionValue, useReducedMotion, useSpring } from 'motion/react';
 import { MonteLogo } from './MonteLogo';
 import { ThemeToggle } from './ThemeToggle';
+import { EASE_SKIPER, MagneticButton, SPRING_SNAPPY } from './MotionPrimitives';
 import { signInWithEmail, signUpWithEmail } from '../lib/monteService';
 
 interface AuthPageProps {
@@ -34,6 +36,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
+
+  // Subtle cursor-reactive parallax drift for splash decorative droplets
+  const prefersReduced = useReducedMotion();
+  const rawX = useMotionValue(0);
+  const rawY = useMotionValue(0);
+  const parallaxX = useSpring(rawX, { stiffness: 120, damping: 18 });
+  const parallaxY = useSpring(rawY, { stiffness: 120, damping: 18 });
+
+  const handleSplashMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (prefersReduced) return;
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+    rawX.set(((e.clientX - cx) / cx) * 7);
+    rawY.set(((e.clientY - cy) / cy) * 7);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,7 +102,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
   if (showSplash) {
     return (
-      <div className="relative min-h-screen w-full overflow-hidden bg-gradient-to-br from-[#F0F6FF] via-white to-[#D6E6FF] dark:from-[#0A1430] dark:via-[#0B1A3A] dark:to-[#0B2E8F]/40 flex flex-col items-center justify-center px-6 py-10">
+      <div
+        onMouseMove={handleSplashMouseMove}
+        className="relative min-h-screen w-full overflow-hidden bg-gradient-to-br from-[#F0F6FF] via-white to-[#D6E6FF] dark:from-[#0A1430] dark:via-[#0B1A3A] dark:to-[#0B2E8F]/40 flex flex-col items-center justify-center px-6 py-10 transition-colors duration-300"
+      >
         {/* Decorative royal blue paint wash circles */}
         <div className="pointer-events-none absolute -top-24 -left-24 h-80 w-80 rounded-full bg-[#1A6BFF]/15 blur-3xl dark:bg-[#2B7FFF]/20" />
         <div className="pointer-events-none absolute -bottom-24 -right-24 h-96 w-96 rounded-full bg-[#2B7FFF]/20 blur-3xl dark:bg-[#1A6BFF]/20" />
@@ -95,39 +115,115 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
           <ThemeToggle />
         </div>
 
-        <div className="relative z-10 flex flex-col items-center text-center max-w-md animate-slide-up">
-          <MonteLogo size="xl" animated />
-          <p className="mt-5 text-lg sm:text-xl font-extrabold tracking-tight text-[#0A1E5C] dark:text-white">
-            Plan it. Invite them. Monte it.
-          </p>
-          <p className="mt-2 text-sm text-[#0A1E5C]/70 dark:text-white/70 max-w-xs">
-            Organize roadtrips, birthdays &amp; beach getaways with split budgets, M-Pesa tracking, live group chats, and shared media vaults.
-          </p>
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={{
+            hidden: {},
+            visible: {
+              transition: { staggerChildren: 0.07 },
+            },
+          }}
+          className="relative z-10 flex flex-col items-center text-center max-w-md"
+        >
+          {/* 1. Emblem */}
+          <motion.div
+            variants={{
+              hidden: { opacity: 0, y: 16 },
+              visible: {
+                opacity: 1,
+                y: 0,
+                transition: { duration: 0.34, ease: EASE_SKIPER },
+              },
+            }}
+          >
+            <MonteLogo
+              size="xl"
+              animated
+              parallaxX={parallaxX}
+              parallaxY={parallaxY}
+            />
+          </motion.div>
 
-          <div className="mt-8 flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
-            <button
+          {/* 2. Headline */}
+          <motion.p
+            variants={{
+              hidden: { opacity: 0, y: 16 },
+              visible: {
+                opacity: 1,
+                y: 0,
+                transition: { duration: 0.32, ease: EASE_SKIPER },
+              },
+            }}
+            className="mt-5 text-lg sm:text-xl font-extrabold tracking-tight text-[#0A1E5C] dark:text-white"
+          >
+            Plan it. Invite them. Monte it.
+          </motion.p>
+
+          {/* 3. Subheadline */}
+          <motion.p
+            variants={{
+              hidden: { opacity: 0, y: 16 },
+              visible: {
+                opacity: 1,
+                y: 0,
+                transition: { duration: 0.32, ease: EASE_SKIPER },
+              },
+            }}
+            className="mt-2 text-sm text-[#0A1E5C]/70 dark:text-white/70 max-w-xs"
+          >
+            Organize roadtrips, birthdays &amp; beach getaways with split budgets, M-Pesa tracking, live group chats, and shared media vaults.
+          </motion.p>
+
+          {/* 4. CTA Buttons */}
+          <motion.div
+            variants={{
+              hidden: { opacity: 0, y: 16 },
+              visible: {
+                opacity: 1,
+                y: 0,
+                transition: { duration: 0.32, ease: EASE_SKIPER },
+              },
+            }}
+            className="mt-8 flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto"
+          >
+            <MagneticButton
               type="button"
               onClick={() => setShowSplash(false)}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-8 py-3.5 text-sm font-bold text-white shadow-monte transition active:scale-[0.98]"
+              className="monte-shimmer-btn relative overflow-hidden w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-8 py-3.5 text-sm font-bold text-white shadow-monte transition-colors"
             >
-              Get Started
+              <span>Get Started</span>
               <ArrowRight className="h-4 w-4" />
-            </button>
-            <button
+            </MagneticButton>
+            <motion.button
               type="button"
               onClick={() => onLogin()}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/40 bg-white/80 dark:bg-[#13224A] px-6 py-3.5 text-sm font-bold text-[#0A1E5C] dark:text-white hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E] transition"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+              transition={SPRING_SNAPPY}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/40 bg-white/85 dark:bg-[#13224A] px-6 py-3.5 text-sm font-bold text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF] dark:hover:border-[#2B7FFF] hover:shadow-[0_0_0_3px_rgba(43,127,255,0.22)] transition-all"
             >
               Quick Demo Enter
-            </button>
-          </div>
+            </motion.button>
+          </motion.div>
 
-          <div className="mt-10 inline-flex items-center gap-2 rounded-full bg-white/80 dark:bg-[#13224A]/90 border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-4 py-2 text-xs font-semibold text-[#0B2E8F] dark:text-[#D6E6FF]">
+          {/* 5. Bottom Media-Vault Badge */}
+          <motion.div
+            variants={{
+              hidden: { opacity: 0, y: 16 },
+              visible: {
+                opacity: 1,
+                y: 0,
+                transition: { duration: 0.32, ease: EASE_SKIPER },
+              },
+            }}
+            className="mt-10 inline-flex items-center gap-2 rounded-full bg-white/80 dark:bg-[#13224A]/90 border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-4 py-2 text-xs font-semibold text-[#0B2E8F] dark:text-[#D6E6FF]"
+          >
             <Camera className="h-3.5 w-3.5 text-[#1A6BFF] dark:text-[#2B7FFF]" />
             <span>Videos &amp; photos from your events live here</span>
             <Film className="h-3.5 w-3.5 text-[#1A6BFF] dark:text-[#2B7FFF]" />
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       </div>
     );
   }
@@ -161,30 +257,34 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
         {/* Auth Card */}
         <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-6 sm:p-7 shadow-monte dark:shadow-monte-dark">
-          {/* Tabs: Log In / Sign Up */}
+          {/* Tabs: Log In / Sign Up with gliding pill */}
           <div className="grid grid-cols-2 rounded-2xl bg-[#F0F6FF] dark:bg-[#0A1430] p-1 mb-6">
-            <button
-              type="button"
-              onClick={() => setMode('login')}
-              className={`rounded-xl py-2.5 text-sm font-bold transition ${
-                mode === 'login'
-                  ? 'bg-[#1A6BFF] text-white shadow-sm'
-                  : 'text-[#0A1E5C]/70 dark:text-white/70 hover:text-[#0A1E5C] dark:hover:text-white'
-              }`}
-            >
-              Log In
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('signup')}
-              className={`rounded-xl py-2.5 text-sm font-bold transition ${
-                mode === 'signup'
-                  ? 'bg-[#1A6BFF] text-white shadow-sm'
-                  : 'text-[#0A1E5C]/70 dark:text-white/70 hover:text-[#0A1E5C] dark:hover:text-white'
-              }`}
-            >
-              Sign Up
-            </button>
+            {(['login', 'signup'] as const).map((tabMode) => {
+              const active = mode === tabMode;
+              return (
+                <button
+                  key={tabMode}
+                  type="button"
+                  onClick={() => setMode(tabMode)}
+                  className={`relative rounded-xl py-2.5 text-sm font-bold transition-colors ${
+                    active
+                      ? 'text-white'
+                      : 'text-[#0A1E5C]/70 dark:text-white/70 hover:text-[#0A1E5C] dark:hover:text-white'
+                  }`}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId="auth-mode-pill"
+                      transition={SPRING_SNAPPY}
+                      className="absolute inset-0 rounded-xl bg-[#1A6BFF] shadow-sm"
+                    />
+                  )}
+                  <span className="relative z-10">
+                    {tabMode === 'login' ? 'Log In' : 'Sign Up'}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">

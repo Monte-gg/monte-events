@@ -27,9 +27,15 @@ import {
   UserProfile,
 } from '../types';
 import { formatDateShort, formatKES } from '../data/sampleData';
+import { motion } from 'motion/react';
 import { uploadFileToStorage } from '../lib/monteService';
 import { ThemeToggle } from './ThemeToggle';
 import { EventChatRoom } from './EventChatRoom';
+import {
+  SPRING_POP,
+  SPRING_SNAPPY,
+  ScrollProgressBar,
+} from './MotionPrimitives';
 
 interface EventRoomPageProps {
   event: MonteEvent;
@@ -81,6 +87,17 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
   const [newGuestName, setNewGuestName] = useState('');
   const [newGuestPhone, setNewGuestPhone] = useState('');
   const [showAddGuestRow, setShowAddGuestRow] = useState(false);
+  const [justConfirmedId, setJustConfirmedId] = useState<string | null>(null);
+
+  const handleTogglePaidWithFlash = (guest: Guest) => {
+    if (!guest.paid) {
+      setJustConfirmedId(guest.id);
+      setTimeout(() => {
+        setJustConfirmedId((curr) => (curr === guest.id ? null : curr));
+      }, 650);
+    }
+    onToggleGuestPaid(event.id, guest.id);
+  };
 
   const mediaInputRef = useRef<HTMLInputElement>(null);
 
@@ -284,7 +301,7 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
         </div>
       </div>
 
-      {/* Room Tabs: Guests | Budget | Media | Chat */}
+      {/* Room Tabs: Guests | Budget | Media | Chat with gliding active pill */}
       <div className="grid grid-cols-4 gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-1.5">
         {(
           [
@@ -306,23 +323,32 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
               key={t.id}
               type="button"
               onClick={() => onTabChange(t.id)}
-              className={`relative flex items-center justify-center gap-1.5 sm:gap-2 rounded-xl py-2.5 px-2 text-xs sm:text-sm font-extrabold transition ${
+              className={`relative flex items-center justify-center gap-1.5 sm:gap-2 rounded-xl py-2.5 px-2 text-xs sm:text-sm font-extrabold transition-colors ${
                 active
-                  ? 'bg-[#1A6BFF] text-white shadow-sm'
+                  ? 'text-white'
                   : 'text-[#0A1E5C]/70 dark:text-white/70 hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]'
               }`}
             >
-              <Icon className="h-4 w-4 shrink-0" />
-              <span>{t.label}</span>
-              {'badge' in t && t.badge && t.badge > 0 ? (
-                <span
-                  className={`flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-extrabold ${
-                    active ? 'bg-white text-[#1A6BFF]' : 'bg-[#1A6BFF] text-white'
-                  }`}
-                >
-                  {t.badge}
-                </span>
-              ) : null}
+              {active && (
+                <motion.span
+                  layoutId="event-room-tab-pill"
+                  transition={SPRING_SNAPPY}
+                  className="absolute inset-0 rounded-xl bg-[#1A6BFF] shadow-sm"
+                />
+              )}
+              <span className="relative z-10 inline-flex items-center gap-1.5 sm:gap-2">
+                <Icon className="h-4 w-4 shrink-0" />
+                <span>{t.label}</span>
+                {'badge' in t && t.badge && t.badge > 0 ? (
+                  <span
+                    className={`flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-extrabold ${
+                      active ? 'bg-white text-[#1A6BFF]' : 'bg-[#1A6BFF] text-white'
+                    }`}
+                  >
+                    {t.badge}
+                  </span>
+                ) : null}
+              </span>
             </button>
           );
         })}
@@ -346,12 +372,7 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
                 {paidGuests.length} of {event.guests.length} Paid ({paidPct}%)
               </span>
             </div>
-            <div className="h-3 w-full rounded-full bg-[#D6E6FF] dark:bg-[#0A1430] overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-[#1A6BFF] to-[#2B7FFF] transition-all duration-500"
-                style={{ width: `${paidPct}%` }}
-              />
-            </div>
+            <ScrollProgressBar percent={paidPct} heightClass="h-3" />
           </div>
 
           {/* Search + Filter + Add Guest */}
@@ -422,64 +443,120 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
             </form>
           )}
 
-          {/* Guest List */}
+          {/* Guest List with Animated Checkmark Draw-In & Green Row Flash */}
           <div className="space-y-2.5">
-            {filteredGuests.map((guest) => (
-              <div
-                key={guest.id}
-                className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border p-4 transition ${
-                  guest.paid
-                    ? 'border-emerald-500/35 bg-white dark:bg-[#13224A]'
-                    : 'border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#13224A]'
-                }`}
-              >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div
-                    className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-extrabold text-white shadow-sm"
-                    style={{ backgroundColor: guest.avatarColor }}
-                  >
-                    {guest.initials}
-                    {guest.online && (
-                      <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-[#13224A]" />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-extrabold text-sm text-[#0A1E5C] dark:text-white truncate">
-                        {guest.name}
-                      </p>
-                      {guest.paid ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-extrabold text-emerald-600 dark:text-emerald-400">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          In the Event
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-[#F0F6FF] dark:bg-[#0B1A3A] px-2.5 py-0.5 text-[11px] font-bold text-[#0B2E8F] dark:text-[#D6E6FF]">
-                          <Clock className="h-3 w-3" />
-                          Pending
-                        </span>
+            {filteredGuests.map((guest) => {
+              const isFlashing = justConfirmedId === guest.id;
+              return (
+                <motion.div
+                  key={guest.id}
+                  layout
+                  animate={
+                    isFlashing
+                      ? {
+                          backgroundColor: [
+                            'rgba(16, 185, 129, 0.22)',
+                            'rgba(16, 185, 129, 0.0)',
+                          ],
+                        }
+                      : undefined
+                  }
+                  transition={{ duration: 0.6 }}
+                  className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border p-4 transition-colors ${
+                    guest.paid
+                      ? 'border-emerald-500/40 bg-white dark:bg-[#13224A]'
+                      : 'border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#13224A]'
+                  }`}
+                >
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div
+                      className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-extrabold text-white shadow-sm"
+                      style={{ backgroundColor: guest.avatarColor }}
+                    >
+                      {guest.initials}
+                      {guest.online && (
+                        <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-[#13224A]" />
                       )}
                     </div>
-                    <p className="text-xs text-[#0A1E5C]/60 dark:text-white/60 mt-0.5">
-                      {guest.phone} • <span className="font-bold text-[#1A6BFF] dark:text-[#2B7FFF]">{formatKES(guest.amount)}</span>
-                    </p>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-extrabold text-sm text-[#0A1E5C] dark:text-white truncate">
+                          {guest.name}
+                        </p>
+                        {guest.paid ? (
+                          <motion.span
+                            initial={{ scale: 0.85, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={SPRING_POP}
+                            className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-extrabold text-emerald-600 dark:text-emerald-400"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            In the Event
+                          </motion.span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#F0F6FF] dark:bg-[#0B1A3A] px-2.5 py-0.5 text-[11px] font-bold text-[#0B2E8F] dark:text-[#D6E6FF]">
+                            <Clock className="h-3 w-3" />
+                            Pending
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-[#0A1E5C]/60 dark:text-white/60 mt-0.5">
+                        {guest.phone} •{' '}
+                        <span className="font-bold text-[#1A6BFF] dark:text-[#2B7FFF]">
+                          {formatKES(guest.amount)}
+                        </span>
+                      </p>
+                    </div>
                   </div>
-                </div>
 
-                {/* Confirm Payment Checkbox / Tick Button */}
-                <label className="inline-flex items-center gap-2.5 cursor-pointer select-none rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/70 dark:bg-[#0B1A3A] px-3.5 py-2 hover:border-[#1A6BFF] transition self-start sm:self-center">
-                  <input
-                    type="checkbox"
-                    checked={guest.paid}
-                    onChange={() => onToggleGuestPaid(event.id, guest.id)}
-                    className="h-4 w-4 rounded accent-emerald-600 cursor-pointer"
-                  />
-                  <span className="text-xs font-extrabold text-[#0A1E5C] dark:text-white">
-                    {guest.paid ? 'Payment Confirmed' : 'Confirm Payment'}
-                  </span>
-                </label>
-              </div>
-            ))}
+                  {/* Animated Confirm Payment Toggle with SVG Checkmark Draw-In */}
+                  <motion.button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={guest.paid}
+                    whileTap={{ scale: 0.96 }}
+                    onClick={() => handleTogglePaidWithFlash(guest)}
+                    className={`inline-flex items-center gap-2.5 cursor-pointer select-none rounded-xl border px-3.5 py-2 transition-colors self-start sm:self-center ${
+                      guest.paid
+                        ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                        : 'border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/70 dark:bg-[#0B1A3A] text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF]'
+                    }`}
+                  >
+                    <span
+                      className={`flex h-5 w-5 items-center justify-center rounded-md border transition-colors ${
+                        guest.paid
+                          ? 'border-emerald-500 bg-emerald-500 text-white'
+                          : 'border-[#1A6BFF]/40 bg-white dark:bg-[#13224A]'
+                      }`}
+                    >
+                      <svg
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        className="h-3.5 w-3.5"
+                        aria-hidden="true"
+                      >
+                        <motion.path
+                          d="M3.2 8.4 L6.6 11.6 L12.8 4.6"
+                          stroke="currentColor"
+                          strokeWidth="2.4"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          initial={false}
+                          animate={{
+                            pathLength: guest.paid ? 1 : 0,
+                            opacity: guest.paid ? 1 : 0,
+                          }}
+                          transition={{ duration: 0.25, ease: 'easeOut' }}
+                        />
+                      </svg>
+                    </span>
+                    <span className="text-xs font-extrabold">
+                      {guest.paid ? 'Payment Confirmed' : 'Confirm Payment'}
+                    </span>
+                  </motion.button>
+                </motion.div>
+              );
+            })}
           </div>
         </div>
       )}

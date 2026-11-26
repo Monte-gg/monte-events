@@ -8,8 +8,10 @@ import {
   Users,
 } from 'lucide-react';
 import { EventRoomTab, MonteEvent } from '../types';
+import { motion } from 'motion/react';
 import { formatDateShort, formatKES } from '../data/sampleData';
 import { ThemeToggle } from './ThemeToggle';
+import { SPRING_SNAPPY, ScrollProgressBar } from './MotionPrimitives';
 
 interface MyRoomsPageProps {
   events: MonteEvent[];
@@ -83,20 +85,30 @@ export const MyRoomsPage: React.FC<MyRoomsPageProps> = ({
           />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {availableTypes.map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTypeFilter(t)}
-              className={`rounded-full px-3.5 py-1.5 text-xs font-extrabold transition ${
-                typeFilter === t
-                  ? 'bg-[#1A6BFF] text-white'
-                  : 'bg-white dark:bg-[#13224A] border border-[#D6E6FF] dark:border-[#2B7FFF]/25 text-[#0A1E5C]/75 dark:text-white/75'
-              }`}
-            >
-              {t}
-            </button>
-          ))}
+          {availableTypes.map((t) => {
+            const active = typeFilter === t;
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTypeFilter(t)}
+                className={`relative rounded-full px-3.5 py-1.5 text-xs font-extrabold transition-colors ${
+                  active
+                    ? 'text-white'
+                    : 'bg-white dark:bg-[#13224A] border border-[#D6E6FF] dark:border-[#2B7FFF]/25 text-[#0A1E5C]/75 dark:text-white/75'
+                }`}
+              >
+                {active && (
+                  <motion.span
+                    layoutId="my-rooms-type-pill"
+                    transition={SPRING_SNAPPY}
+                    className="absolute inset-0 rounded-full bg-[#1A6BFF]"
+                  />
+                )}
+                <span className="relative z-10">{t}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -108,9 +120,11 @@ export const MyRoomsPage: React.FC<MyRoomsPageProps> = ({
           const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
 
           return (
-            <div
+            <motion.div
               key={event.id}
-              className="group overflow-hidden rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#13224A] shadow-sm hover:shadow-monte transition flex flex-col"
+              whileHover={{ y: -3 }}
+              transition={SPRING_SNAPPY}
+              className="group overflow-hidden rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#13224A] shadow-sm hover:shadow-monte dark:hover:shadow-monte-dark transition-shadow flex flex-col"
             >
               <div
                 className={`relative h-40 bg-gradient-to-br ${event.coverGradient} overflow-hidden`}
@@ -154,12 +168,7 @@ export const MyRoomsPage: React.FC<MyRoomsPageProps> = ({
                   </span>
                 </div>
 
-                <div className="h-2.5 w-full rounded-full bg-[#D6E6FF] dark:bg-[#0A1430] overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-[#1A6BFF] to-[#2B7FFF]"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
+                <ScrollProgressBar percent={pct} />
 
                 <div className="flex items-center gap-2 pt-1">
                   <button
@@ -183,7 +192,7 @@ export const MyRoomsPage: React.FC<MyRoomsPageProps> = ({
                   </button>
                 </div>
               </div>
-            </div>
+            </motion.div>
           );
         })}
       </div>

@@ -1,9 +1,12 @@
 import React from 'react';
+import { motion, MotionValue } from 'motion/react';
 
 interface MonteLogoProps {
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   layout?: 'stacked' | 'horizontal';
   animated?: boolean;
+  parallaxX?: MotionValue<number>;
+  parallaxY?: MotionValue<number>;
   className?: string;
 }
 
@@ -11,6 +14,8 @@ export const MonteLogo: React.FC<MonteLogoProps> = ({
   size = 'md',
   layout = 'stacked',
   animated = false,
+  parallaxX,
+  parallaxY,
   className = '',
 }) => {
   const iconDims = {
@@ -34,7 +39,7 @@ export const MonteLogo: React.FC<MonteLogoProps> = ({
   const SplatterMark = (
     <svg
       viewBox="0 0 160 160"
-      className={`${iconDims} shrink-0 drop-shadow-md select-none`}
+      className={`${iconDims} shrink-0 drop-shadow-md select-none overflow-visible`}
       aria-hidden="true"
     >
       <defs>
@@ -63,20 +68,52 @@ export const MonteLogo: React.FC<MonteLogoProps> = ({
         fill={`url(#wc-main-${uid})`}
       />
 
-      {/* Watercolor paint splatters & droplets */}
-      <circle cx="142" cy="34" r="5.5" fill="#2B7FFF" opacity="0.88" />
-      <circle cx="149" cy="48" r="2.8" fill="#1A6BFF" opacity="0.75" />
-      <circle cx="22" cy="34" r="4.5" fill="#1A6BFF" opacity="0.82" />
-      <circle cx="14" cy="46" r="2.2" fill="#2B7FFF" opacity="0.7" />
-      <circle cx="136" cy="126" r="6" fill="#0B2E8F" opacity="0.78" />
-      <circle cx="146" cy="116" r="2.6" fill="#2B7FFF" opacity="0.8" />
-      <circle cx="28" cy="132" r="4.8" fill="#2B7FFF" opacity="0.8" />
-      <circle cx="18" cy="120" r="2.4" fill="#0B2E8F" opacity="0.65" />
-      <ellipse cx="96" cy="14" rx="6" ry="3.2" transform="rotate(-18 96 14)" fill="#2B7FFF" opacity="0.78" />
-      <ellipse cx="62" cy="146" rx="5.5" ry="2.8" transform="rotate(14 62 146)" fill="#1A6BFF" opacity="0.75" />
+      {/* Cursor-reactive parallax decorative splatter droplets */}
+      <motion.g
+        style={
+          parallaxX && parallaxY
+            ? { x: parallaxX, y: parallaxY }
+            : undefined
+        }
+      >
+        <circle cx="142" cy="34" r="5.5" fill="#2B7FFF" opacity="0.88" />
+        <circle cx="149" cy="48" r="2.8" fill="#1A6BFF" opacity="0.75" />
+        <circle cx="22" cy="34" r="4.5" fill="#1A6BFF" opacity="0.82" />
+        <circle cx="14" cy="46" r="2.2" fill="#2B7FFF" opacity="0.7" />
+        <circle cx="136" cy="126" r="6" fill="#0B2E8F" opacity="0.78" />
+        <circle cx="146" cy="116" r="2.6" fill="#2B7FFF" opacity="0.8" />
+        <circle cx="28" cy="132" r="4.8" fill="#2B7FFF" opacity="0.8" />
+        <circle cx="18" cy="120" r="2.4" fill="#0B2E8F" opacity="0.65" />
+        <ellipse
+          cx="96"
+          cy="14"
+          rx="6"
+          ry="3.2"
+          transform="rotate(-18 96 14)"
+          fill="#2B7FFF"
+          opacity="0.78"
+        />
+        <ellipse
+          cx="62"
+          cy="146"
+          rx="5.5"
+          ry="2.8"
+          transform="rotate(14 62 146)"
+          fill="#1A6BFF"
+          opacity="0.75"
+        />
+      </motion.g>
 
       {/* Subtle watercolor highlight inside blob */}
-      <ellipse cx="62" cy="54" rx="22" ry="16" fill="#6BB0FF" opacity="0.22" transform="rotate(-25 62 54)" />
+      <ellipse
+        cx="62"
+        cy="54"
+        rx="22"
+        ry="16"
+        fill="#6BB0FF"
+        opacity="0.22"
+        transform="rotate(-25 62 54)"
+      />
 
       {/* White circle ring */}
       <circle

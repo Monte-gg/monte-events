@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { MotionConfig } from 'motion/react';
 import { ThemeProvider } from './context/ThemeContext';
 import { supabase } from './lib/supabase';
 import {
@@ -599,7 +600,12 @@ function MonteAppContent() {
         </AppShell>
       )}
 
-      <MediaLightbox item={lightboxMedia} onClose={() => setLightboxMedia(null)} />
+      <MediaLightbox
+        item={lightboxMedia}
+        items={media}
+        onNavigate={setLightboxMedia}
+        onClose={() => setLightboxMedia(null)}
+      />
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </>
   );
@@ -607,8 +613,10 @@ function MonteAppContent() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <MonteAppContent />
-    </ThemeProvider>
+    <MotionConfig reducedMotion="user">
+      <ThemeProvider>
+        <MonteAppContent />
+      </ThemeProvider>
+    </MotionConfig>
   );
 }

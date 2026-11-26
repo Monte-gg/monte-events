@@ -15,8 +15,10 @@ import {
   X,
 } from 'lucide-react';
 import { EVENT_TYPES, SAMPLE_FRIENDS, formatKES } from '../data/sampleData';
+import { AnimatePresence, motion } from 'motion/react';
 import { EventType, Guest, MonteEvent } from '../types';
 import { ThemeToggle } from './ThemeToggle';
+import { EASE_SKIPER, SPRING_POP } from './MotionPrimitives';
 
 interface CreateRoomPageProps {
   creatorName: string;
@@ -80,6 +82,12 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
   onShowToast,
 }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [direction, setDirection] = useState<1 | -1>(1);
+
+  const goToStep = (next: 1 | 2 | 3) => {
+    setDirection(next >= step ? 1 : -1);
+    setStep(next);
+  };
 
   // Step 1
   const [eventType, setEventType] = useState<EventType>('Roadtrip');
@@ -271,7 +279,7 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
             <button
               key={s.num}
               type="button"
-              onClick={() => setStep(s.num)}
+              onClick={() => goToStep(s.num)}
               className={`flex items-center gap-2.5 rounded-2xl border p-3 text-left transition ${
                 active
                   ? 'border-[#1A6BFF] bg-[#1A6BFF] text-white shadow-monte'
@@ -297,163 +305,192 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
         })}
       </div>
 
-      {/* Main Card */}
-      <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-5 sm:p-7 shadow-sm space-y-6">
-        {/* STEP 1: EVENT TYPE */}
-        {step === 1 && (
-          <div className="space-y-5">
-            <div>
-              <h2 className="text-lg font-extrabold text-[#0A1E5C] dark:text-white">
-                What are we planning?
-              </h2>
-              <p className="text-xs sm:text-sm text-[#0A1E5C]/65 dark:text-white/65 mt-0.5">
-                Pick a vibe for your room — we’ll tailor the cover and budget template.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2.5">
-              {EVENT_TYPES.map((t) => {
-                const selected = eventType === t;
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setEventType(t)}
-                    className={`rounded-2xl px-4 py-3 text-sm font-bold border transition-all active:scale-95 ${
-                      selected
-                        ? 'border-[#1A6BFF] bg-[#1A6BFF] text-white shadow-monte'
-                        : 'border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/70 dark:bg-[#0B1A3A] text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF]'
-                    }`}
-                  >
-                    {t}
-                  </button>
-                );
-              })}
-            </div>
-
-            {eventType === 'Custom' && (
+      {/* Main Card with directional horizontal slide transitions */}
+      <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-5 sm:p-7 shadow-sm overflow-hidden">
+        <AnimatePresence mode="wait" custom={direction}>
+          {/* STEP 1: EVENT TYPE */}
+          {step === 1 && (
+            <motion.div
+              key="step-1"
+              custom={direction}
+              initial={{ opacity: 0, x: direction * 36 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: direction * -36 }}
+              transition={{ duration: 0.24, ease: EASE_SKIPER }}
+              className="space-y-5"
+            >
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70 mb-1.5">
-                  Custom Event Type
-                </label>
-                <input
-                  type="text"
-                  value={customType}
-                  onChange={(e) => setCustomType(e.target.value)}
-                  placeholder="e.g. Game Night, Safari Camp, Yacht Party"
-                  className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-4 py-2.5 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                />
-              </div>
-            )}
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setStep(2)}
-                className="inline-flex items-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-6 py-3 text-sm font-extrabold text-white shadow-monte transition"
-              >
-                Next: Event Details
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 2: DETAILS */}
-        {step === 2 && (
-          <div className="space-y-5">
-            <div>
-              <h2 className="text-lg font-extrabold text-[#0A1E5C] dark:text-white">
-                Tell the squad about it
-              </h2>
-              <p className="text-xs sm:text-sm text-[#0A1E5C]/65 dark:text-white/65 mt-0.5">
-                Give your room a catchy name, date, meeting point, and quick itinerary.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70 mb-1.5">
-                  Event Name
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Nanyuki Weekend Roadtrip"
-                  className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-4 py-3 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                />
+                <h2 className="text-lg font-extrabold text-[#0A1E5C] dark:text-white">
+                  What are we planning?
+                </h2>
+                <p className="text-xs sm:text-sm text-[#0A1E5C]/65 dark:text-white/65 mt-0.5">
+                  Pick a vibe for your room — we’ll tailor the cover and budget template.
+                </p>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70 mb-1.5">
-                  Event Date
-                </label>
-                <div className="relative">
-                  <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#1A6BFF] dark:text-[#2B7FFF]" />
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] pl-10 pr-4 py-3 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                  />
-                </div>
+              <div className="flex flex-wrap gap-2.5">
+                {EVENT_TYPES.map((t) => {
+                  const selected = eventType === t;
+                  return (
+                    <motion.button
+                      key={t}
+                      type="button"
+                      onClick={() => setEventType(t)}
+                      whileHover={{ y: -1 }}
+                      whileTap={{ scale: 0.93 }}
+                      animate={{ scale: selected ? [1, 1.06, 1] : 1 }}
+                      transition={SPRING_POP}
+                      className={`rounded-2xl px-4 py-3 text-sm font-bold border transition-colors ${
+                        selected
+                          ? 'border-[#1A6BFF] bg-[#1A6BFF] text-white shadow-monte'
+                          : 'border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/70 dark:bg-[#0B1A3A] text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF]'
+                      }`}
+                    >
+                      {t}
+                    </motion.button>
+                  );
+                })}
               </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70 mb-1.5">
-                  Location
-                </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#1A6BFF] dark:text-[#2B7FFF]" />
+              {eventType === 'Custom' && (
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70 mb-1.5">
+                    Custom Event Type
+                  </label>
                   <input
                     type="text"
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    placeholder="e.g. Westlands / Nanyuki / Diani"
-                    className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] pl-10 pr-4 py-3 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                    value={customType}
+                    onChange={(e) => setCustomType(e.target.value)}
+                    placeholder="e.g. Game Night, Safari Camp, Yacht Party"
+                    className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-4 py-2.5 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => goToStep(2)}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-6 py-3 text-sm font-extrabold text-white shadow-monte transition active:scale-95"
+                >
+                  Next: Event Details
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* STEP 2: DETAILS */}
+          {step === 2 && (
+            <motion.div
+              key="step-2"
+              custom={direction}
+              initial={{ opacity: 0, x: direction * 36 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: direction * -36 }}
+              transition={{ duration: 0.24, ease: EASE_SKIPER }}
+              className="space-y-5"
+            >
+              <div>
+                <h2 className="text-lg font-extrabold text-[#0A1E5C] dark:text-white">
+                  Tell the squad about it
+                </h2>
+                <p className="text-xs sm:text-sm text-[#0A1E5C]/65 dark:text-white/65 mt-0.5">
+                  Give your room a catchy name, date, meeting point, and quick itinerary.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70 mb-1.5">
+                    Event Name
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Nanyuki Weekend Roadtrip"
+                    className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-4 py-3 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70 mb-1.5">
+                    Event Date
+                  </label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#1A6BFF] dark:text-[#2B7FFF]" />
+                    <input
+                      type="date"
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                      className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] pl-10 pr-4 py-3 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70 mb-1.5">
+                    Location
+                  </label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#1A6BFF] dark:text-[#2B7FFF]" />
+                    <input
+                      type="text"
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      placeholder="e.g. Westlands / Nanyuki / Diani"
+                      className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] pl-10 pr-4 py-3 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70 mb-1.5">
+                    Description &amp; Plan
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Share departure times, dress code, activities, or what’s included..."
+                    className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-4 py-3 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none resize-none"
                   />
                 </div>
               </div>
 
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70 mb-1.5">
-                  Description &amp; Plan
-                </label>
-                <textarea
-                  rows={3}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Share departure times, dress code, activities, or what’s included..."
-                  className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-4 py-3 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none resize-none"
-                />
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => goToStep(1)}
+                  className="inline-flex items-center gap-1.5 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-5 py-3 text-sm font-bold text-[#0A1E5C] dark:text-white hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => goToStep(3)}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-6 py-3 text-sm font-extrabold text-white shadow-monte transition active:scale-95"
+                >
+                  Next: Budget &amp; Guests
+                  <ArrowRight className="h-4 w-4" />
+                </button>
               </div>
-            </div>
+            </motion.div>
+          )}
 
-            <div className="flex items-center justify-between pt-2">
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="inline-flex items-center gap-1.5 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-5 py-3 text-sm font-bold text-[#0A1E5C] dark:text-white hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={() => setStep(3)}
-                className="inline-flex items-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-6 py-3 text-sm font-extrabold text-white shadow-monte transition"
-              >
-                Next: Budget &amp; Guests
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 3: BUDGET & GUESTS + INVITE FRIENDS */}
-        {step === 3 && (
-          <div className="space-y-6">
+          {/* STEP 3: BUDGET & GUESTS + INVITE FRIENDS */}
+          {step === 3 && (
+            <motion.div
+              key="step-3"
+              custom={direction}
+              initial={{ opacity: 0, x: direction * 36 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: direction * -36 }}
+              transition={{ duration: 0.24, ease: EASE_SKIPER }}
+              className="space-y-6"
+            >
             {/* Budget & Max Guests */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="sm:col-span-2 space-y-4">
@@ -678,7 +715,7 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
             <div className="flex items-center justify-between pt-2">
               <button
                 type="button"
-                onClick={() => setStep(2)}
+                onClick={() => goToStep(2)}
                 className="inline-flex items-center gap-1.5 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-5 py-3 text-sm font-bold text-[#0A1E5C] dark:text-white hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -693,8 +730,9 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
                 Create Room
               </button>
             </div>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

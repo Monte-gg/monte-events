@@ -26,8 +26,10 @@ import {
 } from '../types';
 import { EVENT_TYPES, formatDateShort, formatKES } from '../data/sampleData';
 import { uploadFileToStorage } from '../lib/monteService';
+import { motion } from 'motion/react';
 import { MonteLogo } from './MonteLogo';
 import { ThemeToggle } from './ThemeToggle';
+import { SPRING_SNAPPY } from './MotionPrimitives';
 
 interface ProfilePageProps {
   user: UserProfile;
@@ -208,7 +210,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
         </div>
       </div>
 
-      {/* Tabs: About | My Events | Media | Settings */}
+      {/* Tabs: About | My Events | Media | Settings with gliding active pill */}
       <div className="grid grid-cols-4 gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-1.5">
         {(
           [
@@ -217,20 +219,30 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
             { id: 'media', label: 'Media' },
             { id: 'settings', label: 'Settings' },
           ] as const
-        ).map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setActiveTab(t.id)}
-            className={`rounded-xl py-2.5 text-xs sm:text-sm font-extrabold transition ${
-              activeTab === t.id
-                ? 'bg-[#1A6BFF] text-white shadow-sm'
-                : 'text-[#0A1E5C]/70 dark:text-white/70 hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+        ).map((t) => {
+          const active = activeTab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setActiveTab(t.id)}
+              className={`relative rounded-xl py-2.5 text-xs sm:text-sm font-extrabold transition-colors ${
+                active
+                  ? 'text-white'
+                  : 'text-[#0A1E5C]/70 dark:text-white/70 hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]'
+              }`}
+            >
+              {active && (
+                <motion.span
+                  layoutId="profile-tab-pill"
+                  transition={SPRING_SNAPPY}
+                  className="absolute inset-0 rounded-xl bg-[#1A6BFF] shadow-sm"
+                />
+              )}
+              <span className="relative z-10">{t.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* TAB: ABOUT */}
