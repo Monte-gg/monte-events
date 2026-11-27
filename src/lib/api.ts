@@ -3,10 +3,15 @@ import {
   ChatMessage,
   ChatReaction,
   EventType,
+  ExpenseCategory,
+  ExpenseItem,
   Guest,
   MediaItem,
   MonteEvent,
+  MpesaType,
+  PaymentStatus,
   PlatformMember,
+  PublicInvitePreview,
 } from '../types';
 
 export const API_BASE_URL = (
@@ -50,8 +55,20 @@ interface RawGuest {
   avatar_color?: string;
   amount?: number;
   paid?: boolean;
+  payment_status?: PaymentStatus;
+  mpesa_code?: string | null;
   online?: boolean;
   paid_at?: string | null;
+}
+
+interface RawExpense {
+  id: string;
+  room_id: string;
+  title: string;
+  category?: ExpenseCategory;
+  amount?: number;
+  paid_by?: string;
+  created_at?: string;
 }
 
 interface RawRoom {
@@ -70,7 +87,13 @@ interface RawRoom {
   invite_code: string;
   budget_breakdown?: BudgetBreakdown;
   created_by?: string;
+  host_email?: string | null;
+  mpesa_type?: MpesaType | null;
+  mpesa_number?: string | null;
+  mpesa_account?: string | null;
+  mpesa_name?: string | null;
   guests?: RawGuest[];
+  expenses?: RawExpense[];
 }
 
 interface RawMessage {
@@ -102,6 +125,12 @@ interface RawMedia {
 }
 
 function mapGuest(g: RawGuest): Guest {
+  const paid = Boolean(g.paid) || g.payment_status === 'confirmed';
+  const paymentStatus: PaymentStatus = paid
+    ? 'confirmed'
+    : g.payment_status === 'submitted'
+    ? 'submitted'
+    : 'pending';
   return {
     id: g.id,
     name: g.name,
@@ -110,9 +139,23 @@ function mapGuest(g: RawGuest): Guest {
     initials: g.initials || g.name.slice(0, 2).toUpperCase(),
     avatarColor: g.avatar_color || '#1A6BFF',
     amount: Number(g.amount || 0),
-    paid: Boolean(g.paid),
+    paid,
+    paymentStatus,
+    mpesaCode: g.mpesa_code || undefined,
     online: Boolean(g.online),
     paidAt: g.paid_at ? 'Paid' : undefined,
+  };
+}
+
+function mapExpense(e: RawExpense): ExpenseItem {
+  return {
+    id: e.id,
+    roomId: e.room_id,
+    title: e.title,
+    category: e.category || 'Other',
+    amount: Number(e.amount || 0),
+    paidBy: e.paid_by || 'Host',
+    createdAt: e.created_at,
   };
 }
 
@@ -133,6 +176,7 @@ function mapRoom(r: RawRoom): MonteEvent {
     costPerPerson: Number(r.cost_per_person || 0),
     inviteCode: r.invite_code,
     guests: (r.guests || []).map(mapGuest),
+    expenses: (r.expenses || []).map(mapExpense),
     budgetBreakdown: r.budget_breakdown || {
       Transport: 0,
       Food: 0,
@@ -142,6 +186,11 @@ function mapRoom(r: RawRoom): MonteEvent {
     },
     unreadCount: 0,
     createdBy: r.created_by || 'Monte Host',
+    hostEmail: r.host_email || undefined,
+    mpesaType: r.mpesa_type || undefined,
+    mpesaNumber: r.mpesa_number || undefined,
+    mpesaAccount: r.mpesa_account || undefined,
+    mpesaName: r.mpesa_name || undefined,
   };
 }
 
@@ -227,6 +276,11 @@ export async function createRoomOnApi(
         invite_code: event.inviteCode,
         budget_breakdown: event.budgetBreakdown,
         created_by: event.createdBy,
+        host_email: event.hostEmail || null,
+        mpesa_type: event.mpesaType || null,
+        mpesa_number: event.mpesaNumber || null,
+        mpesa_account: event.mpesaAccount || null,
+        mpesa_name: event.mpesaName || null,
         guests: event.guests.map((g) => ({
           name: g.name,
           phone: g.phone,
@@ -485,5 +539,122 @@ export async function joinRoomOnApi(
     };
   } catch {
     return { ok: false };
+  }
+}
+
+export async function fetchInvitePreviewFromApi(
+  code: string
+): Promise<PublicInvitePreview | null> {
+  try {
+    const data = await fetchJson<{
+      preview: {
+        id: string;
+        name: string;
+        type?: EventType;
+        custom_type?: string | null;
+        date: string;
+        location?: string;
+        description?: string;
+        cover_image?: string;
+        cover_gradient?: string;
+        cost_per_person?: number;
+        max_guests?: number;
+        guest_count?: number;
+        paid_count?: number;
+        invite_code: string;
+        created_by?: string;
+      };
+    }>(`/api/rooms/invite/${encodeURIComponent(code)}`);
+    if (!data.preview) return null;
+    const p = data.preview;
+    return {
+      id: p.id,
+      name: p.name,
+      type: p.type || 'Roadtrip',
+      customType: p.custom_type || undefined,
+      date: p.date,
+      location: p.location || 'Nairobi, KE',
+      description: p.description || '',
+      coverImage: p.cover_image || '',
+      coverGradient:
+        p.cover_gradient || 'from-[#0B2E8F] via-[#1A6BFF] to-[#2B7FFF]',
+      costPerPerson: Number(p.cost_per_person || 0),
+      maxGuests: Number(p.max_guests || 10),
+      guestCount: Number(p.guest_count || 0),
+      paidCount: Number(p.paid_count || 0),
+      inviteCode: p.invite_code,
+      createdBy: p.created_by || 'Monte Host',
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function submitGuestMpesaCodeOnApi(
+  roomId: string,
+  guestId: string,
+  mpesaCode: string
+): Promise<{ ok: boolean; guest?: Guest }> {
+  try {
+    const data = await fetchJson<{ ok: boolean; guest?: RawGuest }>(
+      `/api/rooms/${encodeURIComponent(roomId)}/guests/${encodeURIComponent(
+        guestId
+      )}/submit-payment`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ mpesa_code: mpesaCode }),
+      }
+    );
+    return {
+      ok: Boolean(data.ok),
+      guest: data.guest ? mapGuest(data.guest) : undefined,
+    };
+  } catch {
+    return { ok: false };
+  }
+}
+
+export async function createExpenseOnApi(
+  roomId: string,
+  payload: {
+    title: string;
+    category: ExpenseCategory;
+    amount: number;
+    paidBy: string;
+  }
+): Promise<ExpenseItem | null> {
+  try {
+    const data = await fetchJson<{ expense: RawExpense }>(
+      `/api/rooms/${encodeURIComponent(roomId)}/expenses`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          title: payload.title,
+          category: payload.category,
+          amount: payload.amount,
+          paid_by: payload.paidBy,
+        }),
+      }
+    );
+    return data.expense ? mapExpense(data.expense) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteExpenseOnApi(
+  roomId: string,
+  expenseId: string
+): Promise<boolean> {
+  try {
+    await fetchJson(
+      `/api/rooms/${encodeURIComponent(roomId)}/expenses/${encodeURIComponent(
+        expenseId
+      )}`,
+      { method: 'DELETE' }
+    );
+    return true;
+  } catch {
+    return false;
   }
 }

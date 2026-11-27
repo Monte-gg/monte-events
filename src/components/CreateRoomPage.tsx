@@ -8,6 +8,7 @@ import {
   Link2,
   MapPin,
   Search,
+  Smartphone,
   Sparkles,
   UserPlus,
   Users,
@@ -16,7 +17,7 @@ import {
 } from 'lucide-react';
 import { EVENT_TYPES, formatKES } from '../data/sampleData';
 import { AnimatePresence, motion } from 'motion/react';
-import { EventType, Guest, MonteEvent } from '../types';
+import { EventType, Guest, MonteEvent, MpesaType } from '../types';
 import { ThemeToggle } from './ThemeToggle';
 import { EASE_SKIPER, SPRING_POP } from './MotionPrimitives';
 
@@ -112,6 +113,10 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
   const [manualName, setManualName] = useState('');
   const [manualPhone, setManualPhone] = useState('');
   const [manualEmail, setManualEmail] = useState('');
+  const [mpesaType, setMpesaType] = useState<MpesaType>('phone');
+  const [mpesaNumber, setMpesaNumber] = useState('');
+  const [mpesaAccount, setMpesaAccount] = useState('');
+  const [mpesaName, setMpesaName] = useState(creatorName);
   const [copiedLink, setCopiedLink] = useState(false);
 
   const inviteCode = useMemo(
@@ -194,6 +199,14 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
       createdBy: creatorName,
       hostId: creatorId || undefined,
       hostEmail: creatorEmail || undefined,
+      mpesaType: mpesaNumber.trim() ? mpesaType : undefined,
+      mpesaNumber: mpesaNumber.trim() || undefined,
+      mpesaAccount:
+        mpesaType === 'paybill' && mpesaAccount.trim()
+          ? mpesaAccount.trim()
+          : undefined,
+      mpesaName: mpesaName.trim() || undefined,
+      expenses: [],
       budgetBreakdown: {
         Transport: Math.round(totalBudget * 0.3),
         Food: Math.round(totalBudget * 0.25),
@@ -582,6 +595,75 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* Optional Host M-PESA Payment Details */}
+            <div className="rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 text-sm font-extrabold text-[#0A1E5C] dark:text-white">
+                  <Smartphone className="h-4 w-4 text-emerald-500" />
+                  Host M-PESA Details (Optional)
+                </div>
+                <span className="text-[11px] font-semibold text-[#0A1E5C]/60 dark:text-white/60">
+                  Guests can copy &amp; submit confirmation codes
+                </span>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    { id: 'phone', label: 'Send Money' },
+                    { id: 'till', label: 'Till Number' },
+                    { id: 'paybill', label: 'Paybill' },
+                    { id: 'pochi', label: 'Pochi la Biashara' },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setMpesaType(opt.id)}
+                    className={`rounded-xl px-3 py-1.5 text-xs font-extrabold border transition ${
+                      mpesaType === opt.id
+                        ? 'border-[#1A6BFF] bg-[#1A6BFF] text-white'
+                        : 'border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] text-[#0A1E5C] dark:text-white'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <input
+                  type="text"
+                  value={mpesaNumber}
+                  onChange={(e) => setMpesaNumber(e.target.value)}
+                  placeholder={
+                    mpesaType === 'paybill'
+                      ? 'Paybill Business No.'
+                      : mpesaType === 'till'
+                      ? 'Buy Goods Till No.'
+                      : 'Phone (07XX XXX XXX)'
+                  }
+                  className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                />
+                {mpesaType === 'paybill' && (
+                  <input
+                    type="text"
+                    value={mpesaAccount}
+                    onChange={(e) => setMpesaAccount(e.target.value)}
+                    placeholder="Account Name / Number"
+                    className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                  />
+                )}
+                <input
+                  type="text"
+                  value={mpesaName}
+                  onChange={(e) => setMpesaName(e.target.value)}
+                  placeholder="Recipient / Account Name"
+                  className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                />
+              </div>
             </div>
 
             {/* Invite Link Box */}

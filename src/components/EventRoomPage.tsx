@@ -12,9 +12,11 @@ import {
   MessageCircle,
   Play,
   Plus,
+  Receipt,
   Search,
   Share2,
   ShieldCheck,
+  Smartphone,
   Trash2,
   UploadCloud,
   UserMinus,
@@ -25,6 +27,7 @@ import {
 import {
   ChatMessage,
   EventRoomTab,
+  ExpenseCategory,
   Guest,
   MediaItem,
   MonteEvent,
@@ -54,8 +57,23 @@ interface EventRoomPageProps {
   onDeleteEvent: (eventId: string) => void;
   onJoinRoom?: (eventId: string) => void;
   onToggleGuestPaid: (eventId: string, guestId: string) => void;
+  onSubmitGuestMpesaCode: (
+    eventId: string,
+    guestId: string,
+    mpesaCode: string
+  ) => void;
   onAddGuestToEvent: (eventId: string, guest: Guest) => void;
   onRemoveGuestFromEvent: (eventId: string, guestId: string) => void;
+  onAddExpense: (
+    eventId: string,
+    payload: {
+      title: string;
+      category: ExpenseCategory;
+      amount: number;
+      paidBy: string;
+    }
+  ) => void;
+  onDeleteExpense: (eventId: string, expenseId: string) => void;
   onUploadMedia: (eventId: string, items: MediaItem[]) => void;
   onSendMessage: (
     eventId: string,
@@ -84,8 +102,11 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
   onDeleteEvent,
   onJoinRoom,
   onToggleGuestPaid,
+  onSubmitGuestMpesaCode,
   onAddGuestToEvent,
   onRemoveGuestFromEvent,
+  onAddExpense,
+  onDeleteExpense,
   onUploadMedia,
   onSendMessage,
   onToggleReaction,
@@ -96,11 +117,21 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
   const [guestSearch, setGuestSearch] = useState('');
   const [guestFilter, setGuestFilter] = useState<'all' | 'paid' | 'pending'>('all');
   const [copiedInvite, setCopiedInvite] = useState(false);
+  const [copiedMpesa, setCopiedMpesa] = useState(false);
   const [newGuestName, setNewGuestName] = useState('');
   const [newGuestPhone, setNewGuestPhone] = useState('');
   const [showAddGuestRow, setShowAddGuestRow] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [justConfirmedId, setJustConfirmedId] = useState<string | null>(null);
+  const [mpesaModalGuest, setMpesaModalGuest] = useState<Guest | null>(null);
+  const [mpesaCodeInput, setMpesaCodeInput] = useState('');
+
+  // Expense form state
+  const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [expTitle, setExpTitle] = useState('');
+  const [expCategory, setExpCategory] = useState<ExpenseCategory>('Transport');
+  const [expAmount, setExpAmount] = useState('');
+  const [expPaidBy, setExpPaidBy] = useState(user.name);
 
   const handleTogglePaidWithFlash = (guest: Guest) => {
     if (!guest.paid) {
@@ -130,7 +161,48 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
     () => paidGuests.reduce((sum, g) => sum + g.amount, 0),
     [paidGuests]
   );
-  const remainingAmount = Math.max(0, event.totalBudget - collectedAmount);
+  const expenses = event.expenses || [];
+  const totalSpent = useMemo(
+    () => expenses.reduce((sum, ex) => sum + ex.amount, 0),
+    [expenses]
+  );
+  const remainingBalance = collectedAmount - totalSpent;
+  const spentPct =
+    collectedAmount > 0
+      ? Math.min(100, Math.round((totalSpent / collectedAmount) * 100))
+      : totalSpent > 0
+      ? 100
+      : 0;
+
+  const inviteUrl = `https://monte-gg.github.io/monte-events/?join=${event.inviteCode}`;
+  const whatsappShareUrl = `https://wa.me/?text=${encodeURIComponent(
+    `You're invited to ${event.name}!\n📅 ${formatDateShort(event.date)}\n📍 ${event.location}\n💸 ${formatKES(event.costPerPerson)} per person\n\nJoin on MONTE EVENTS: ${inviteUrl}`
+  )}`;
+
+  const handleCopyMpesa = () => {
+    if (!event.mpesaNumber) return;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(event.mpesaNumber).catch(() => {});
+    }
+    setCopiedMpesa(true);
+    onShowToast('M-PESA number copied!');
+    setTimeout(() => setCopiedMpesa(false), 2000);
+  };
+
+  const handleAddExpenseSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = Number(expAmount);
+    if (!expTitle.trim() || !amt || amt <= 0) return;
+    onAddExpense(event.id, {
+      title: expTitle.trim(),
+      category: expCategory,
+      amount: amt,
+      paidBy: expPaidBy.trim() || user.name,
+    });
+    setExpTitle('');
+    setExpAmount('');
+    setShowExpenseForm(false);
+  };
 
   const filteredGuests = useMemo(() => {
     const q = guestSearch.trim().toLowerCase();
@@ -366,7 +438,7 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
             <button
               type="button"
               onClick={handleCopyLink}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white text-[#0B2E8F] hover:bg-[#F0F6FF] px-5 py-3 text-xs sm:text-sm font-extrabold shadow-lg transition active:scale-95"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white text-[#0B2E8F] hover:bg-[#F0F6FF] px-4 py-2.5 text-xs sm:text-sm font-extrabold shadow-lg transition active:scale-95"
             >
               {copiedInvite ? (
                 <>
@@ -375,12 +447,20 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
                 </>
               ) : (
                 <>
-                  <Share2 className="h-4 w-4 text-[#1A6BFF]" />
-                  Share Invite Link
-                  <Copy className="h-3.5 w-3.5 opacity-70" />
+                  <Copy className="h-4 w-4 text-[#1A6BFF]" />
+                  Copy Link
                 </>
               )}
             </button>
+            <a
+              href={whatsappShareUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-600 px-4 py-2.5 text-xs sm:text-sm font-extrabold text-white shadow-lg transition active:scale-95"
+            >
+              <Share2 className="h-4 w-4" />
+              Share on WhatsApp
+            </a>
           </div>
         </div>
       </div>
@@ -441,6 +521,54 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
       {/* TAB 1: GUESTS */}
       {activeTab === 'guests' && (
         <div className="space-y-4">
+          {/* Pay via M-PESA Card */}
+          {event.mpesaNumber && (
+            <div className="rounded-3xl border border-emerald-500/35 bg-gradient-to-r from-emerald-500/10 via-white to-[#F0F6FF] dark:from-emerald-500/15 dark:via-[#13224A] dark:to-[#0B1A3A] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-3.5">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-sm">
+                  <Smartphone className="h-5 w-5" />
+                </span>
+                <div>
+                  <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                    Pay via M-PESA ·{' '}
+                    {event.mpesaType === 'till'
+                      ? 'Buy Goods Till'
+                      : event.mpesaType === 'paybill'
+                      ? 'Paybill'
+                      : event.mpesaType === 'pochi'
+                      ? 'Pochi la Biashara'
+                      : 'Send Money'}
+                  </span>
+                  <p className="mt-1 text-lg sm:text-xl font-extrabold font-mono text-[#0A1E5C] dark:text-white tracking-wide">
+                    {event.mpesaNumber}
+                  </p>
+                  <p className="text-xs text-[#0A1E5C]/70 dark:text-white/70">
+                    {event.mpesaAccount ? `Account: ${event.mpesaAccount} • ` : ''}
+                    {event.mpesaName ? `Name: ${event.mpesaName} • ` : ''}
+                    Amount: <span className="font-extrabold text-[#1A6BFF] dark:text-[#2B7FFF]">{formatKES(event.costPerPerson)}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyMpesa}
+                className="shrink-0 inline-flex items-center justify-center gap-1.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 text-xs font-extrabold text-white shadow-sm transition active:scale-95"
+              >
+                {copiedMpesa ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" />
+                    Copy Number
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
           {/* Progress Bar Card */}
           <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-5 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -581,6 +709,11 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
                             <CheckCircle2 className="h-3.5 w-3.5" />
                             In the Event
                           </motion.span>
+                        ) : guest.paymentStatus === 'submitted' && guest.mpesaCode ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/35 px-2.5 py-0.5 text-[11px] font-extrabold text-amber-700 dark:text-amber-300">
+                            <Clock className="h-3 w-3" />
+                            Verifying ({guest.mpesaCode})
+                          </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-full bg-[#F0F6FF] dark:bg-[#0B1A3A] px-2.5 py-0.5 text-[11px] font-bold text-[#0B2E8F] dark:text-[#D6E6FF]">
                             <Clock className="h-3 w-3" />
@@ -642,7 +775,11 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
                             </svg>
                           </span>
                           <span className="text-xs font-extrabold">
-                            {guest.paid ? 'Payment Confirmed' : 'Confirm Payment'}
+                            {guest.paid
+                              ? 'Payment Confirmed'
+                              : guest.paymentStatus === 'submitted'
+                              ? 'Approve Payment'
+                              : 'Confirm Payment'}
                           </span>
                         </motion.button>
                         <button
@@ -655,9 +792,23 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
                           <UserMinus className="h-4 w-4" />
                         </button>
                       </>
+                    ) : !guest.paid ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMpesaCodeInput(guest.mpesaCode || '');
+                          setMpesaModalGuest(guest);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-3.5 py-2 text-xs font-extrabold text-white shadow-sm transition active:scale-95"
+                      >
+                        <Smartphone className="h-3.5 w-3.5" />
+                        {guest.paymentStatus === 'submitted'
+                          ? 'Update M-PESA Code'
+                          : "I've Paid"}
+                      </button>
                     ) : (
-                      <span className="text-[11px] font-bold text-[#0A1E5C]/55 dark:text-white/55 px-2">
-                        {guest.paid ? 'Confirmed by Host' : 'Awaiting Host'}
+                      <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 px-2">
+                        Confirmed by Host
                       </span>
                     )}
                   </div>
@@ -668,45 +819,190 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
         </div>
       )}
 
-      {/* TAB 2: BUDGET */}
+      {/* TAB 2: BUDGET & TRANSPARENT EXPENSE LOG */}
       {activeTab === 'budget' && (
         <div className="space-y-5">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-            {[
-              { label: 'Total Budget', value: formatKES(event.totalBudget), accent: false },
-              { label: 'Collected', value: formatKES(collectedAmount), accent: true },
-              { label: 'Remaining', value: formatKES(remainingAmount), accent: false },
-              { label: 'Per-Person Cost', value: formatKES(event.costPerPerson), accent: false },
-            ].map((card) => (
-              <div
-                key={card.label}
-                className={`rounded-2xl border p-4 sm:p-5 ${
-                  card.accent
-                    ? 'border-[#1A6BFF] bg-gradient-to-br from-[#0B2E8F] to-[#1A6BFF] text-white shadow-monte'
-                    : 'border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A]'
+          {/* 3 Summary KPI Cards: Total Collected, Total Spent, Remaining Balance */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <div className="rounded-2xl border border-[#1A6BFF] bg-gradient-to-br from-[#0B2E8F] to-[#1A6BFF] p-5 text-white shadow-monte">
+              <p className="text-xs font-bold text-white/80">Total Collected</p>
+              <p className="mt-2 text-2xl font-extrabold tracking-tight">
+                {formatKES(collectedAmount)}
+              </p>
+              <p className="mt-1 text-[11px] text-white/80">
+                From {paidGuests.length} confirmed guest{paidGuests.length === 1 ? '' : 's'} · {formatKES(event.costPerPerson)}/person
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-5">
+              <p className="text-xs font-bold text-[#0A1E5C]/60 dark:text-white/60">
+                Total Spent
+              </p>
+              <p className="mt-2 text-2xl font-extrabold tracking-tight text-[#0A1E5C] dark:text-white">
+                {formatKES(totalSpent)}
+              </p>
+              <p className="mt-1 text-[11px] font-semibold text-[#1A6BFF] dark:text-[#2B7FFF]">
+                Across {expenses.length} logged expense{expenses.length === 1 ? '' : 's'}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-5">
+              <p className="text-xs font-bold text-[#0A1E5C]/60 dark:text-white/60">
+                Remaining Balance
+              </p>
+              <p
+                className={`mt-2 text-2xl font-extrabold tracking-tight ${
+                  remainingBalance >= 0
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-red-600 dark:text-red-400'
                 }`}
               >
-                <p
-                  className={`text-xs font-bold ${
-                    card.accent ? 'text-white/80' : 'text-[#0A1E5C]/60 dark:text-white/60'
-                  }`}
-                >
-                  {card.label}
-                </p>
-                <p className="mt-2 text-lg sm:text-2xl font-extrabold tracking-tight">
-                  {card.value}
+                {formatKES(remainingBalance)}
+              </p>
+              <p className="mt-1 text-[11px] font-semibold text-[#0A1E5C]/60 dark:text-white/60">
+                Collected minus Spent
+              </p>
+            </div>
+          </div>
+
+          {/* Visual Spent vs Collected Progress Bar */}
+          <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-5 space-y-2.5">
+            <div className="flex items-center justify-between text-xs font-bold">
+              <span className="text-[#0A1E5C] dark:text-white">
+                Funds Utilized ({spentPct}% of collected)
+              </span>
+              <span className="text-[#1A6BFF] dark:text-[#2B7FFF]">
+                {formatKES(totalSpent)} / {formatKES(collectedAmount)}
+              </span>
+            </div>
+            <ScrollProgressBar percent={spentPct} heightClass="h-3" />
+          </div>
+
+          {/* Transparent Expense Log */}
+          <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-5 sm:p-6 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-extrabold text-[#0A1E5C] dark:text-white inline-flex items-center gap-2">
+                  <Receipt className="h-4 w-4 text-[#1A6BFF]" />
+                  Itemized Expense Log
+                </h3>
+                <p className="text-xs text-[#0A1E5C]/60 dark:text-white/60">
+                  Every shilling spent is visible to the squad for full transparency.
                 </p>
               </div>
-            ))}
+              <button
+                type="button"
+                onClick={() => setShowExpenseForm((s) => !s)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-4 py-2 text-xs font-extrabold text-white shadow-sm transition active:scale-95"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Expense
+              </button>
+            </div>
+
+            {showExpenseForm && (
+              <form
+                onSubmit={handleAddExpenseSubmit}
+                className="rounded-2xl border border-[#1A6BFF]/35 bg-[#F0F6FF]/70 dark:bg-[#0B1A3A] p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 animate-slide-up"
+              >
+                <input
+                  type="text"
+                  required
+                  value={expTitle}
+                  onChange={(e) => setExpTitle(e.target.value)}
+                  placeholder="Expense title (e.g. Van fuel)"
+                  className="lg:col-span-2 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                />
+                <select
+                  value={expCategory}
+                  onChange={(e) => setExpCategory(e.target.value as ExpenseCategory)}
+                  className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm font-bold text-[#0A1E5C] dark:text-white focus:outline-none"
+                >
+                  <option value="Transport">Transport</option>
+                  <option value="Accommodation">Accommodation</option>
+                  <option value="Food & Drinks">Food &amp; Drinks</option>
+                  <option value="Decor">Decor</option>
+                  <option value="Other">Other</option>
+                </select>
+                <input
+                  type="number"
+                  required
+                  min={1}
+                  value={expAmount}
+                  onChange={(e) => setExpAmount(e.target.value)}
+                  placeholder="Amount (KES)"
+                  className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={expPaidBy}
+                    onChange={(e) => setExpPaidBy(e.target.value)}
+                    placeholder="Paid by"
+                    className="min-w-0 flex-1 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    className="shrink-0 rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-4 py-2 text-xs font-extrabold text-white"
+                  >
+                    Save
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {expenses.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-[#D6E6FF] dark:border-[#2B7FFF]/25 p-6 text-center text-xs text-[#0A1E5C]/60 dark:text-white/60">
+                No expenses logged yet. Click <strong>+ Add Expense</strong> to track transport, accommodation, food, and decor spend.
+              </div>
+            ) : (
+              <div className="divide-y divide-[#D6E6FF]/70 dark:divide-[#2B7FFF]/15">
+                {expenses.map((ex) => (
+                  <div
+                    key={ex.id}
+                    className="py-3 flex items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-extrabold text-[#0A1E5C] dark:text-white truncate">
+                          {ex.title}
+                        </p>
+                        <span className="rounded-full bg-[#F0F6FF] dark:bg-[#0B1A3A] border border-[#D6E6FF] dark:border-[#2B7FFF]/25 px-2.5 py-0.5 text-[10px] font-bold text-[#1A6BFF] dark:text-[#2B7FFF]">
+                          {ex.category}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#0A1E5C]/60 dark:text-white/60 mt-0.5">
+                        Paid by {ex.paidBy}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <span className="text-sm font-extrabold text-[#0A1E5C] dark:text-white">
+                        {formatKES(ex.amount)}
+                      </span>
+                      {isHost && (
+                        <button
+                          type="button"
+                          onClick={() => onDeleteExpense(event.id, ex.id)}
+                          aria-label={`Delete ${ex.title}`}
+                          className="rounded-lg p-1.5 text-red-500 hover:bg-red-500/10 transition"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-5 sm:p-6 space-y-5">
             <div>
               <h3 className="text-base font-extrabold text-[#0A1E5C] dark:text-white">
-                Budget Breakdown
+                Planned Budget Allocation ({formatKES(event.totalBudget)})
               </h3>
               <p className="text-xs text-[#0A1E5C]/60 dark:text-white/60">
-                Planned allocation across Transport, Food, Venue, DJ, and Misc.
+                Target split across Transport, Food, Venue, DJ, and Misc.
               </p>
             </div>
 
@@ -840,6 +1136,81 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
           onSelectMedia={onSelectMedia}
           onShowToast={onShowToast}
         />
+      )}
+
+      {/* Guest "I've Paid" M-PESA Code Modal */}
+      {mpesaModalGuest && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-[#0A1430]/75 backdrop-blur-sm p-4"
+          onClick={() => setMpesaModalGuest(null)}
+        >
+          <div
+            className="animate-slide-up w-full max-w-md rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                  <Smartphone className="h-5 w-5" />
+                </span>
+                <div>
+                  <h3 className="text-base font-extrabold text-[#0A1E5C] dark:text-white">
+                    Submit M-PESA Code
+                  </h3>
+                  <p className="text-xs text-[#0A1E5C]/60 dark:text-white/60">
+                    For {mpesaModalGuest.name} · {formatKES(mpesaModalGuest.amount)}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMpesaModalGuest(null)}
+                className="rounded-full p-1.5 text-[#0A1E5C]/60 dark:text-white/60 hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-[#0A1E5C]/75 dark:text-white/75 leading-relaxed">
+              Paste the M-PESA confirmation code from your SMS (e.g.{' '}
+              <span className="font-mono font-bold">SLK84X92M1</span>). The room host will be notified to approve your payment.
+            </p>
+
+            <input
+              type="text"
+              value={mpesaCodeInput}
+              onChange={(e) => setMpesaCodeInput(e.target.value.toUpperCase())}
+              placeholder="e.g. SLK84X92M1"
+              className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-4 py-3 text-sm font-mono font-extrabold tracking-wider text-[#0A1E5C] dark:text-white uppercase focus:border-[#1A6BFF] focus:outline-none"
+            />
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setMpesaModalGuest(null)}
+                className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-4 py-2 text-xs font-bold text-[#0A1E5C] dark:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={mpesaCodeInput.trim().length < 4}
+                onClick={() => {
+                  onSubmitGuestMpesaCode(
+                    event.id,
+                    mpesaModalGuest.id,
+                    mpesaCodeInput.trim().toUpperCase()
+                  );
+                  setMpesaModalGuest(null);
+                  setMpesaCodeInput('');
+                }}
+                className="rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] disabled:opacity-45 px-5 py-2 text-xs font-extrabold text-white shadow-sm transition"
+              >
+                Submit for Verification
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

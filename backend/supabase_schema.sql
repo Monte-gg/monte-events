@@ -117,3 +117,51 @@ create policy "Allow read media" on public.media
 drop policy if exists "Allow authenticated write media" on public.media;
 create policy "Allow authenticated write media" on public.media
   for all to authenticated using (true) with check (true);
+
+-- ============================================================================
+-- Step 1 Additions: M-PESA Payment Verification & Transparent Expense Log
+-- ============================================================================
+
+-- Add M-PESA & Host Email columns to rooms
+alter table public.rooms
+  add column if not exists mpesa_type text check (mpesa_type in ('phone', 'till', 'paybill', 'pochi')),
+  add column if not exists mpesa_number text,
+  add column if not exists mpesa_account text,
+  add column if not exists mpesa_name text,
+  add column if not exists host_email text;
+
+-- Add M-PESA code & payment_status to guests
+alter table public.guests
+  add column if not exists mpesa_code text,
+  add column if not exists payment_status text not null default 'pending'
+    check (payment_status in ('pending', 'submitted', 'confirmed')),
+  add column if not exists paid_at timestamptz;
+
+-- Backfill existing paid guests to confirmed
+update public.guests
+set payment_status = 'confirmed'
+where paid = true and payment_status = 'pending';
+
+-- Create itemized expenses table
+create table if not exists public.expenses (
+  id uuid primary key default gen_random_uuid(),
+  room_id uuid not null references public.rooms(id) on delete cascade,
+  title text not null,
+  category text not null default 'Other'
+    check (category in ('Transport', 'Accommodation', 'Food & Drinks', 'Decor', 'Other')),
+  amount numeric not null default 0,
+  paid_by text not null default 'Host',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_expenses_room_id on public.expenses(room_id);
+
+alter table public.expenses enable row level security;
+
+drop policy if exists "Allow read expenses" on public.expenses;
+create policy "Allow read expenses" on public.expenses
+  for select using (true);
+
+drop policy if exists "Allow authenticated write expenses" on public.expenses;
+create policy "Allow authenticated write expenses" on public.expenses
+  for all to authenticated using (true) with check (true);

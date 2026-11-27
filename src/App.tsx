@@ -6,10 +6,13 @@ import {
   ApiStatus,
   addGuestOnApi,
   checkApiHealth,
+  createExpenseOnApi,
   createMediaOnApi,
   createRoomOnApi,
   deleteAccountOnApi,
+  deleteExpenseOnApi,
   deleteRoomOnApi,
+  fetchInvitePreviewFromApi,
   fetchMediaFromApi,
   fetchMembersFromApi,
   fetchRoomMessagesFromApi,
@@ -18,6 +21,7 @@ import {
   removeGuestOnApi,
   sendRoomMessageOnApi,
   sendWelcomeEmailOnApi,
+  submitGuestMpesaCodeOnApi,
   toggleGuestPaymentOnApi,
 } from './lib/api';
 import {
@@ -53,15 +57,19 @@ import {
   ChatMessage,
   DirectMessage,
   EventRoomTab,
+  ExpenseCategory,
+  ExpenseItem,
   Guest,
   MediaItem,
   MonteEvent,
   NotificationItem,
   PlatformMember,
+  PublicInvitePreview,
   UserProfile,
 } from './types';
 import { AuthPage } from './components/AuthPage';
 import { EmailVerifiedPage } from './components/EmailVerifiedPage';
+import { EventInvitePreviewPage } from './components/EventInvitePreviewPage';
 import { ResetPasswordModal } from './components/ResetPasswordModal';
 import { AppShell } from './components/AppShell';
 import { DashboardPage } from './components/DashboardPage';
@@ -116,6 +124,10 @@ function MonteAppContent() {
   const [showEmailVerified, setShowEmailVerified] = useState<boolean>(() =>
     detectEmailVerifiedFromUrl()
   );
+  const [invitePreview, setInvitePreview] = useState<PublicInvitePreview | null>(
+    null
+  );
+  const [joiningFromInvite, setJoiningFromInvite] = useState(false);
   const [supabaseUserId, setSupabaseUserId] = useState<string | null>(null);
   const [supabaseStatus, setSupabaseStatus] = useState({
     connected: true,
@@ -339,6 +351,45 @@ function MonteAppContent() {
     };
 
     void syncFromRenderApi();
+
+    // Detect public ?join=CODE invite link on load (even before sign-in)
+    const loadPublicInvite = async () => {
+      if (typeof window === 'undefined') return;
+      const params = new URLSearchParams(window.location.search);
+      const joinCode = params.get('join');
+      if (!joinCode) return;
+
+      const apiPreview = await fetchInvitePreviewFromApi(joinCode);
+      if (!mounted) return;
+      if (apiPreview) {
+        setInvitePreview(apiPreview);
+        return;
+      }
+      // Graceful fallback to preview sample events if API is sleeping or demo invite code
+      const fallback = GUEST_PREVIEW_EVENTS.find(
+        (e) => e.inviteCode.toLowerCase() === joinCode.trim().toLowerCase()
+      );
+      if (fallback) {
+        setInvitePreview({
+          id: fallback.id,
+          name: fallback.name,
+          type: fallback.type,
+          customType: fallback.customType,
+          date: fallback.date,
+          location: fallback.location,
+          description: fallback.description,
+          coverImage: fallback.coverImage,
+          coverGradient: fallback.coverGradient,
+          costPerPerson: fallback.costPerPerson,
+          maxGuests: fallback.maxGuests,
+          guestCount: fallback.guests.length,
+          paidCount: fallback.guests.filter((g) => g.paid).length,
+          inviteCode: fallback.inviteCode,
+          createdBy: fallback.createdBy,
+        });
+      }
+    };
+    void loadPublicInvite();
 
     // Subscribe to live Realtime database changes across tabs/devices
     const channel = supabase
@@ -738,12 +789,114 @@ function MonteAppContent() {
             return {
               ...g,
               paid: nextPaid,
+              paymentStatus: nextPaid ? 'confirmed' : 'pending',
               paidAt,
             };
           }),
         };
       })
     );
+  };
+
+  const handleSubmitGuestMpesaCode = (
+    eventId: string,
+    guestId: string,
+    mpesaCode: string
+  ) => {
+    if (isGuestMode) {
+      promptGuestToSignUp(
+        'Create a free account to submit M-PESA codes and confirm your event spot.'
+      );
+      return;
+    }
+    setEvents((prev) =>
+      prev.map((ev) =>
+        ev.id === eventId
+          ? {
+              ...ev,
+              guests: ev.guests.map((g) =>
+                g.id === guestId
+                  ? { ...g, mpesaCode, paymentStatus: 'submitted' }
+                  : g
+              ),
+            }
+          : ev
+      )
+    );
+    void submitGuestMpesaCodeOnApi(eventId, guestId, mpesaCode);
+    showToast(`M-PESA code ${mpesaCode} submitted for host verification!`);
+  };
+
+  const handleAddExpense = (
+    eventId: string,
+    payload: {
+      title: string;
+      category: ExpenseCategory;
+      amount: number;
+      paidBy: string;
+    }
+  ) => {
+    if (isGuestMode) {
+      promptGuestToSignUp(
+        'Create a free account to log and track event expenses.'
+      );
+      return;
+    }
+    const tempExpense: ExpenseItem = {
+      id: `exp-${Date.now()}`,
+      roomId: eventId,
+      title: payload.title,
+      category: payload.category,
+      amount: payload.amount,
+      paidBy: payload.paidBy,
+    };
+    setEvents((prev) =>
+      prev.map((ev) =>
+        ev.id === eventId
+          ? { ...ev, expenses: [tempExpense, ...(ev.expenses || [])] }
+          : ev
+      )
+    );
+    void createExpenseOnApi(eventId, payload).then((saved) => {
+      if (!saved) return;
+      setEvents((prev) =>
+        prev.map((ev) =>
+          ev.id === eventId
+            ? {
+                ...ev,
+                expenses: (ev.expenses || []).map((ex) =>
+                  ex.id === tempExpense.id ? saved : ex
+                ),
+              }
+            : ev
+        )
+      );
+    });
+    showToast(`Expense "${payload.title}" logged!`);
+  };
+
+  const handleDeleteExpense = (eventId: string, expenseId: string) => {
+    if (isGuestMode) {
+      promptGuestToSignUp('Sign in to manage event expenses.');
+      return;
+    }
+    const targetEvent = events.find((e) => e.id === eventId);
+    if (targetEvent && !isUserRoomHost(targetEvent)) {
+      showToast('Only the room host can delete expenses.', 'info');
+      return;
+    }
+    setEvents((prev) =>
+      prev.map((ev) =>
+        ev.id === eventId
+          ? {
+              ...ev,
+              expenses: (ev.expenses || []).filter((ex) => ex.id !== expenseId),
+            }
+          : ev
+      )
+    );
+    void deleteExpenseOnApi(eventId, expenseId);
+    showToast('Expense removed', 'info');
   };
 
   const handleJoinRoom = useCallback(
@@ -1118,6 +1271,33 @@ function MonteAppContent() {
     }
   };
 
+  const handleJoinFromInvitePreview = async () => {
+    if (!invitePreview) return;
+    if (!isAuthenticated || isGuestMode) {
+      setAuthModal({
+        open: true,
+        mode: 'signup',
+        message: `Sign in or create a free account to join "${invitePreview.name}".`,
+      });
+      return;
+    }
+    setJoiningFromInvite(true);
+    await handleJoinRoom(invitePreview.id);
+    const refreshedRooms = await fetchRoomsFromApi();
+    if (refreshedRooms && refreshedRooms.length > 0) {
+      setEvents(refreshedRooms);
+    }
+    setJoiningFromInvite(false);
+    setActiveEventId(invitePreview.id);
+    setActiveEventTab('guests');
+    setInvitePreview(null);
+    setCurrentPage('event-room');
+    if (typeof window !== 'undefined') {
+      const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
+  };
+
   return (
     <>
       {showEmailVerified ? (
@@ -1125,6 +1305,20 @@ function MonteAppContent() {
           email={user.email || undefined}
           isSignedIn={isAuthenticated}
           onContinue={handleContinueAfterVerified}
+        />
+      ) : invitePreview ? (
+        <EventInvitePreviewPage
+          preview={invitePreview}
+          isSignedIn={isAuthenticated && !isGuestMode}
+          joining={joiningFromInvite}
+          onJoinEvent={handleJoinFromInvitePreview}
+          onDismiss={() => {
+            setInvitePreview(null);
+            if (typeof window !== 'undefined') {
+              const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+              window.history.replaceState({}, document.title, cleanUrl);
+            }
+          }}
         />
       ) : !isAuthenticated ? (
         <AuthPage
@@ -1190,8 +1384,11 @@ function MonteAppContent() {
               onDeleteEvent={handleDeleteEvent}
               onJoinRoom={handleJoinRoom}
               onToggleGuestPaid={handleToggleGuestPaid}
+              onSubmitGuestMpesaCode={handleSubmitGuestMpesaCode}
               onAddGuestToEvent={handleAddGuestToEvent}
               onRemoveGuestFromEvent={handleRemoveGuestFromEvent}
+              onAddExpense={handleAddExpense}
+              onDeleteExpense={handleDeleteExpense}
               onUploadMedia={handleUploadMedia}
               onSendMessage={handleSendMessage}
               onToggleReaction={handleToggleReaction}

@@ -5,6 +5,8 @@ import { supabase, isSupabaseConfigured } from './supabase.js';
 import {
   sendAccountDeletedEmail,
   sendPasswordResetEmail,
+  sendPaymentConfirmedToGuestEmail,
+  sendPaymentSubmittedToHostEmail,
   sendRoomJoinedEmail,
   sendWelcomeEmail,
 } from './mailer.js';
@@ -150,18 +152,25 @@ app.get('/api/members', async (_req, res) => {
 app.get('/api/rooms', async (_req, res) => {
   if (!requireSupabase(res)) return;
   try {
-    const { data: rooms, error: roomsErr } = await supabase
-      .from('rooms')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const [{ data: rooms, error: roomsErr }, { data: guests, error: guestsErr }, expensesRes] =
+      await Promise.all([
+        supabase
+          .from('rooms')
+          .select('*')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('guests')
+          .select('*')
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('expenses')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .then((r) => r)
+          .catch(() => ({ data: [], error: null })),
+      ]);
 
     if (roomsErr) throw roomsErr;
-
-    const { data: guests, error: guestsErr } = await supabase
-      .from('guests')
-      .select('*')
-      .order('created_at', { ascending: true });
-
     if (guestsErr) throw guestsErr;
 
     const guestsByRoom = new Map();
@@ -171,16 +180,78 @@ app.get('/api/rooms', async (_req, res) => {
       guestsByRoom.set(g.room_id, list);
     }
 
+    const expensesByRoom = new Map();
+    for (const ex of expensesRes?.data || []) {
+      const list = expensesByRoom.get(ex.room_id) || [];
+      list.push(ex);
+      expensesByRoom.set(ex.room_id, list);
+    }
+
     const enriched = (rooms || []).map((room) => ({
       ...room,
       invite_link: buildInviteLink(room.invite_code),
       guests: guestsByRoom.get(room.id) || [],
+      expenses: expensesByRoom.get(room.id) || [],
     }));
 
     res.json({ rooms: enriched });
   } catch (err) {
     console.error('GET /api/rooms failed:', err);
     res.status(500).json({ error: err.message || 'Failed to fetch rooms' });
+  }
+});
+
+// GET /api/rooms/invite/:code — public event preview without requiring login
+app.get('/api/rooms/invite/:code', async (req, res) => {
+  if (!requireSupabase(res)) return;
+  try {
+    const code = String(req.params.code || '').trim();
+    if (!code) {
+      return res.status(400).json({ error: 'Invite code is required' });
+    }
+
+    const { data: room, error: roomErr } = await supabase
+      .from('rooms')
+      .select('*')
+      .ilike('invite_code', code)
+      .maybeSingle();
+
+    if (roomErr) throw roomErr;
+    if (!room) {
+      return res.status(404).json({ error: 'Event invite not found' });
+    }
+
+    const { data: guests } = await supabase
+      .from('guests')
+      .select('paid, payment_status')
+      .eq('room_id', room.id);
+
+    const paidCount = (guests || []).filter(
+      (g) => g.paid || g.payment_status === 'confirmed'
+    ).length;
+
+    res.json({
+      preview: {
+        id: room.id,
+        name: room.name,
+        type: room.type,
+        custom_type: room.custom_type,
+        date: room.date,
+        location: room.location,
+        description: room.description,
+        cover_image: room.cover_image,
+        cover_gradient: room.cover_gradient,
+        cost_per_person: Number(room.cost_per_person || 0),
+        max_guests: Number(room.max_guests || 10),
+        guest_count: (guests || []).length,
+        paid_count: paidCount,
+        invite_code: room.invite_code,
+        created_by: room.created_by,
+      },
+    });
+  } catch (err) {
+    console.error('GET /api/rooms/invite/:code failed:', err);
+    res.status(500).json({ error: err.message || 'Failed to load invite preview' });
   }
 });
 
@@ -209,6 +280,11 @@ app.post('/api/rooms', async (req, res) => {
         Misc: 0,
       },
       created_by = 'Monte Host',
+      host_email = null,
+      mpesa_type = null,
+      mpesa_number = null,
+      mpesa_account = null,
+      mpesa_name = null,
       guests = [],
     } = req.body || {};
 
@@ -218,26 +294,48 @@ app.post('/api/rooms', async (req, res) => {
 
     const code = invite_code || generateInviteCode();
 
-    const { data: room, error: roomErr } = await supabase
+    const basePayload = {
+      name,
+      type,
+      custom_type,
+      date,
+      location,
+      description,
+      cover_image,
+      cover_gradient,
+      total_budget: Number(total_budget) || 0,
+      max_guests: Number(max_guests) || 10,
+      cost_per_person: Number(cost_per_person) || 0,
+      invite_code: code,
+      budget_breakdown,
+      created_by,
+    };
+
+    const fullPayload = {
+      ...basePayload,
+      ...(mpesa_type ? { mpesa_type } : {}),
+      ...(mpesa_number ? { mpesa_number } : {}),
+      ...(mpesa_account ? { mpesa_account } : {}),
+      ...(mpesa_name ? { mpesa_name } : {}),
+      ...(host_email ? { host_email } : {}),
+    };
+
+    let { data: room, error: roomErr } = await supabase
       .from('rooms')
-      .insert({
-        name,
-        type,
-        custom_type,
-        date,
-        location,
-        description,
-        cover_image,
-        cover_gradient,
-        total_budget: Number(total_budget) || 0,
-        max_guests: Number(max_guests) || 10,
-        cost_per_person: Number(cost_per_person) || 0,
-        invite_code: code,
-        budget_breakdown,
-        created_by,
-      })
+      .insert(fullPayload)
       .select()
       .single();
+
+    // Graceful fallback if new M-PESA columns haven't been migrated yet
+    if (roomErr && /column .* does not exist/i.test(roomErr.message || '')) {
+      const retry = await supabase
+        .from('rooms')
+        .insert(basePayload)
+        .select()
+        .single();
+      room = retry.data;
+      roomErr = retry.error;
+    }
 
     if (roomErr) throw roomErr;
 
@@ -491,7 +589,59 @@ app.delete('/api/rooms/:id/guests/:guestId', async (req, res) => {
   }
 });
 
-// PATCH /api/rooms/:id/guests/:guestId/payment — toggle paid status & return updated counts
+// POST /api/rooms/:id/guests/:guestId/submit-payment — guest submits M-PESA confirmation code
+app.post('/api/rooms/:id/guests/:guestId/submit-payment', async (req, res) => {
+  if (!requireSupabase(res)) return;
+  try {
+    const { id, guestId } = req.params;
+    const mpesaCode = String(req.body?.mpesa_code || '')
+      .trim()
+      .toUpperCase();
+
+    if (!mpesaCode || mpesaCode.length < 4) {
+      return res.status(400).json({ error: 'Valid M-PESA confirmation code is required' });
+    }
+
+    const { data: updated, error: updateErr } = await supabase
+      .from('guests')
+      .update({
+        mpesa_code: mpesaCode,
+        payment_status: 'submitted',
+      })
+      .eq('id', guestId)
+      .eq('room_id', id)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    // Notify host via Brevo email (non-fatal)
+    const { data: room } = await supabase
+      .from('rooms')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (room?.host_email) {
+      void sendPaymentSubmittedToHostEmail({
+        hostEmail: room.host_email,
+        hostName: room.created_by,
+        guestName: updated.name,
+        mpesaCode,
+        amount: updated.amount || room.cost_per_person,
+        room,
+        frontendUrl: FRONTEND_URL,
+      });
+    }
+
+    res.json({ ok: true, guest: updated });
+  } catch (err) {
+    console.error('POST submit-payment failed:', err);
+    res.status(500).json({ error: err.message || 'Failed to submit M-PESA code' });
+  }
+});
+
+// PATCH /api/rooms/:id/guests/:guestId/payment — host approves/toggles confirmed status
 app.patch('/api/rooms/:id/guests/:guestId/payment', async (req, res) => {
   if (!requireSupabase(res)) return;
   try {
@@ -510,17 +660,34 @@ app.patch('/api/rooms/:id/guests/:guestId/payment', async (req, res) => {
 
     const nextPaid =
       typeof req.body?.paid === 'boolean' ? req.body.paid : !existing.paid;
+    const nextStatus = nextPaid ? 'confirmed' : 'pending';
 
-    const { data: updated, error: updateErr } = await supabase
+    let { data: updated, error: updateErr } = await supabase
       .from('guests')
       .update({
         paid: nextPaid,
+        payment_status: nextStatus,
         paid_at: nextPaid ? new Date().toISOString() : null,
       })
       .eq('id', guestId)
       .eq('room_id', id)
       .select()
       .single();
+
+    if (updateErr && /column .* does not exist/i.test(updateErr.message || '')) {
+      const retry = await supabase
+        .from('guests')
+        .update({
+          paid: nextPaid,
+          paid_at: nextPaid ? new Date().toISOString() : null,
+        })
+        .eq('id', guestId)
+        .eq('room_id', id)
+        .select()
+        .single();
+      updated = retry.data;
+      updateErr = retry.error;
+    }
 
     if (updateErr) throw updateErr;
 
@@ -539,6 +706,25 @@ app.patch('/api/rooms/:id/guests/:guestId/payment', async (req, res) => {
       0
     );
 
+    // Email guest when host confirms payment
+    if (nextPaid && updated?.email) {
+      const { data: room } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (room) {
+        void sendPaymentConfirmedToGuestEmail({
+          email: updated.email,
+          name: updated.name,
+          amount: updated.amount || room.cost_per_person,
+          mpesaCode: updated.mpesa_code,
+          room,
+          frontendUrl: FRONTEND_URL,
+        });
+      }
+    }
+
     res.json({
       guest: updated,
       counts: {
@@ -550,6 +736,78 @@ app.patch('/api/rooms/:id/guests/:guestId/payment', async (req, res) => {
   } catch (err) {
     console.error('PATCH payment failed:', err);
     res.status(500).json({ error: err.message || 'Failed to update payment' });
+  }
+});
+
+// Expenses CRUD: GET / POST / DELETE /api/rooms/:id/expenses
+app.get('/api/rooms/:id/expenses', async (req, res) => {
+  if (!requireSupabase(res)) return;
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabase
+      .from('expenses')
+      .select('*')
+      .eq('room_id', id)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json({ expenses: data || [] });
+  } catch (err) {
+    console.error('GET /api/rooms/:id/expenses failed:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch expenses' });
+  }
+});
+
+app.post('/api/rooms/:id/expenses', async (req, res) => {
+  if (!requireSupabase(res)) return;
+  try {
+    const { id } = req.params;
+    const {
+      title,
+      category = 'Other',
+      amount = 0,
+      paid_by = 'Host',
+    } = req.body || {};
+
+    if (!title || Number(amount) <= 0) {
+      return res
+        .status(400)
+        .json({ error: 'Expense title and positive amount are required' });
+    }
+
+    const { data, error } = await supabase
+      .from('expenses')
+      .insert({
+        room_id: id,
+        title: String(title).trim(),
+        category,
+        amount: Number(amount),
+        paid_by: String(paid_by).trim() || 'Host',
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(201).json({ expense: data });
+  } catch (err) {
+    console.error('POST /api/rooms/:id/expenses failed:', err);
+    res.status(500).json({ error: err.message || 'Failed to add expense' });
+  }
+});
+
+app.delete('/api/rooms/:id/expenses/:expenseId', async (req, res) => {
+  if (!requireSupabase(res)) return;
+  try {
+    const { id, expenseId } = req.params;
+    const { error } = await supabase
+      .from('expenses')
+      .delete()
+      .eq('id', expenseId)
+      .eq('room_id', id);
+    if (error) throw error;
+    res.json({ ok: true, deletedExpenseId: expenseId });
+  } catch (err) {
+    console.error('DELETE /api/rooms/:id/expenses/:expenseId failed:', err);
+    res.status(500).json({ error: err.message || 'Failed to delete expense' });
   }
 });
 

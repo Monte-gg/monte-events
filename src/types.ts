@@ -21,6 +21,45 @@ export interface Friend {
   online: boolean;
 }
 
+export type MpesaType = 'phone' | 'till' | 'paybill' | 'pochi';
+
+export type PaymentStatus = 'pending' | 'submitted' | 'confirmed';
+
+export type ExpenseCategory =
+  | 'Transport'
+  | 'Accommodation'
+  | 'Food & Drinks'
+  | 'Decor'
+  | 'Other';
+
+export interface ExpenseItem {
+  id: string;
+  roomId: string;
+  title: string;
+  category: ExpenseCategory;
+  amount: number;
+  paidBy: string;
+  createdAt?: string;
+}
+
+export interface PublicInvitePreview {
+  id: string;
+  name: string;
+  type: EventType;
+  customType?: string;
+  date: string;
+  location: string;
+  description: string;
+  coverImage: string;
+  coverGradient: string;
+  costPerPerson: number;
+  maxGuests: number;
+  guestCount: number;
+  paidCount: number;
+  inviteCode: string;
+  createdBy: string;
+}
+
 export interface Guest {
   id: string;
   friendId?: string;
@@ -31,6 +70,8 @@ export interface Guest {
   avatarColor: string;
   amount: number;
   paid: boolean;
+  paymentStatus?: PaymentStatus;
+  mpesaCode?: string;
   online: boolean;
   paidAt?: string;
 }
@@ -105,6 +146,11 @@ export interface MonteEvent {
   createdBy: string;
   hostId?: string;
   hostEmail?: string;
+  mpesaType?: MpesaType;
+  mpesaNumber?: string;
+  mpesaAccount?: string;
+  mpesaName?: string;
+  expenses?: ExpenseItem[];
 }
 
 export interface UserProfile {
