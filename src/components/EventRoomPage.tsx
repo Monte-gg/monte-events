@@ -747,8 +747,8 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
       {/* TAB 1: GUESTS */}
       {activeTab === 'guests' && (
         <div className="space-y-4">
-          {/* Pay via M-PESA Card — Primary "Pay KES [Amount]" STK Push CTA + subtle copy icon */}
-          {event.mpesaNumber && (
+          {/* Pay via M-PESA Card — Always visible whenever costPerPerson > 0 or mpesaNumber is set */}
+          {(event.mpesaNumber || event.costPerPerson > 0) && (
             <div className="rounded-3xl border border-emerald-500/35 bg-gradient-to-r from-emerald-500/10 via-white to-[#F0F6FF] dark:from-emerald-500/15 dark:via-[#13224A] dark:to-[#0B1A3A] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-start gap-3.5 min-w-0">
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-sm">
@@ -757,38 +757,44 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
                 <div className="min-w-0">
                   <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
                     Pay via M-PESA ·{' '}
-                    {event.mpesaType === 'till'
-                      ? 'Buy Goods Till'
-                      : event.mpesaType === 'paybill'
-                      ? 'Paybill'
-                      : event.mpesaType === 'pochi'
-                      ? 'Pochi la Biashara'
-                      : 'Send Money'}
+                    {event.mpesaNumber
+                      ? event.mpesaType === 'till'
+                        ? 'Buy Goods Till'
+                        : event.mpesaType === 'paybill'
+                        ? 'Paybill'
+                        : event.mpesaType === 'pochi'
+                        ? 'Pochi la Biashara'
+                        : 'Send Money'
+                      : 'Instant STK Push'}
                   </span>
                   <div className="mt-1 flex items-center gap-2 flex-wrap">
                     <p className="text-lg sm:text-xl font-extrabold font-mono text-[#0A1E5C] dark:text-white tracking-wide">
-                      {event.mpesaNumber}
+                      {event.mpesaNumber || `M-PESA • ${formatKES(event.costPerPerson)}`}
                     </p>
-                    <button
-                      type="button"
-                      onClick={handleCopyMpesa}
-                      title="Copy M-PESA number"
-                      aria-label="Copy M-PESA number"
-                      className="inline-flex items-center gap-1 rounded-lg border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white/80 dark:bg-[#0B1A3A] hover:border-emerald-500 px-2 py-1 text-[10px] font-bold text-[#0A1E5C]/70 dark:text-white/75 transition"
-                    >
-                      {copiedMpesa ? (
-                        <>
-                          <Check className="h-3 w-3 text-emerald-500" />
-                          Copied
-                        </>
-                      ) : (
-                        <Copy className="h-3 w-3" />
-                      )}
-                    </button>
+                    {event.mpesaNumber && (
+                      <button
+                        type="button"
+                        onClick={handleCopyMpesa}
+                        title="Copy M-PESA number"
+                        aria-label="Copy M-PESA number"
+                        className="inline-flex items-center gap-1 rounded-lg border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white/80 dark:bg-[#0B1A3A] hover:border-emerald-500 px-2 py-1 text-[10px] font-bold text-[#0A1E5C]/70 dark:text-white/75 transition"
+                      >
+                        {copiedMpesa ? (
+                          <>
+                            <Check className="h-3 w-3 text-emerald-500" />
+                            Copied
+                          </>
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                      </button>
+                    )}
                   </div>
                   <p className="text-xs text-[#0A1E5C]/70 dark:text-white/70 mt-0.5">
                     {event.mpesaAccount ? `Account: ${event.mpesaAccount} • ` : ''}
-                    {event.mpesaName ? `Name: ${event.mpesaName} • ` : ''}
+                    {event.mpesaName
+                      ? `Name: ${event.mpesaName} • `
+                      : `Host: ${event.createdBy} • `}
                     Amount:{' '}
                     <span className="font-extrabold text-[#1A6BFF] dark:text-[#2B7FFF]">
                       {formatKES(event.costPerPerson)}
