@@ -79,6 +79,7 @@ import { GlobalChatsPage } from './components/GlobalChatsPage';
 import { MyRoomsPage } from './components/MyRoomsPage';
 import { MembersPage } from './components/MembersPage';
 import { MemberProfileModal } from './components/MemberProfileModal';
+import { EventFlyerModal } from './components/EventFlyerModal';
 import { MediaVaultPage } from './components/MediaVaultPage';
 import { ProfilePage } from './components/ProfilePage';
 import { MediaLightbox } from './components/MediaLightbox';
@@ -440,6 +441,7 @@ function MonteAppContent() {
     items: MediaItem[];
     index: number;
   } | null>(null);
+  const [flyerEvent, setFlyerEvent] = useState<MonteEvent | null>(null);
   const [toasts, setToasts] = useState<ToastData[]>([]);
 
   const handleSelectMedia = useCallback(
@@ -684,6 +686,7 @@ function MonteAppContent() {
         prev.map((ev) => (ev.id === newEvent.id ? savedRoom : ev))
       );
       setActiveEventId((curr) => (curr === newEvent.id ? savedRoom.id : curr));
+      setFlyerEvent((curr) => (curr && curr.id === newEvent.id ? savedRoom : curr));
       setMessagesByEvent((prev) => {
         const existing = prev[newEvent.id] || [welcomeMsg];
         const next = { ...prev };
@@ -699,7 +702,8 @@ function MonteAppContent() {
     setActiveEventId(newEvent.id);
     setActiveEventTab('guests');
     setCurrentPage('event-room');
-    showToast(`Room "${newEvent.name}" created!`);
+    setFlyerEvent(newEvent);
+    showToast(`Room "${newEvent.name}" created! Your Event Flyer is ready.`);
   };
 
   const isUserRoomHost = useCallback(
@@ -1354,6 +1358,7 @@ function MonteAppContent() {
               creatorName={user.name}
               creatorEmail={user.email}
               creatorId={supabaseUserId}
+              isGuestMode={isGuestMode}
               onCreateEvent={handleCreateEvent}
               onCancel={() => setCurrentPage('dashboard')}
               onShowToast={showToast}
@@ -1394,6 +1399,7 @@ function MonteAppContent() {
               onToggleReaction={handleToggleReaction}
               onTogglePin={handleTogglePin}
               onSelectMedia={handleSelectMedia}
+              onOpenFlyer={setFlyerEvent}
               onShowToast={showToast}
             />
           )}
@@ -1525,6 +1531,11 @@ function MonteAppContent() {
         onOpenEvent={(eventId) => handleOpenEvent(eventId, 'guests')}
       />
 
+      <EventFlyerModal
+        event={flyerEvent}
+        onClose={() => setFlyerEvent(null)}
+        onShowToast={showToast}
+      />
       <MediaLightbox
         items={lightboxState?.items || []}
         currentIndex={lightboxState ? lightboxState.index : -1}

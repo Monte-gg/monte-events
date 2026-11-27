@@ -1,15 +1,17 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
   Calendar,
   Check,
   Copy,
+  Image as ImageIcon,
   Link2,
+  Loader2,
   MapPin,
-  Search,
   Smartphone,
   Sparkles,
+  UploadCloud,
   UserPlus,
   Users,
   Wallet,
@@ -18,6 +20,7 @@ import {
 import { EVENT_TYPES, formatKES } from '../data/sampleData';
 import { AnimatePresence, motion } from 'motion/react';
 import { EventType, Guest, MonteEvent, MpesaType } from '../types';
+import { uploadFileToStorage } from '../lib/monteService';
 import { ThemeToggle } from './ThemeToggle';
 import { EASE_SKIPER, SPRING_POP } from './MotionPrimitives';
 
@@ -25,6 +28,7 @@ interface CreateRoomPageProps {
   creatorName: string;
   creatorEmail?: string;
   creatorId?: string | null;
+  isGuestMode?: boolean;
   onCreateEvent: (newEvent: MonteEvent) => void;
   onCancel: () => void;
   onShowToast: (msg: string) => void;
@@ -82,6 +86,7 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
   creatorName,
   creatorEmail,
   creatorId,
+  isGuestMode = false,
   onCreateEvent,
   onCancel,
   onShowToast,
@@ -103,6 +108,35 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
   const [date, setDate] = useState('2026-12-28');
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
+  const [isDraggingCover, setIsDraggingCover] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSelectCoverFile = (file: File | null | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      onShowToast('Please choose an image file (JPG, PNG, or WebP).');
+      return;
+    }
+    if (coverPreviewUrl) {
+      URL.revokeObjectURL(coverPreviewUrl);
+    }
+    setCoverFile(file);
+    setCoverPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleClearCover = () => {
+    if (coverPreviewUrl) {
+      URL.revokeObjectURL(coverPreviewUrl);
+    }
+    setCoverFile(null);
+    setCoverPreviewUrl(null);
+    if (coverInputRef.current) {
+      coverInputRef.current.value = '';
+    }
+  };
 
   // Step 3
   const [totalBudget, setTotalBudget] = useState<number>(60000);
@@ -155,69 +189,82 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const handleSubmit = () => {
-    const finalName =
-      name.trim() || `${eventType === 'Custom' && customType.trim() ? customType.trim() : eventType} Getaway`;
-    const finalLocation = location.trim() || 'Nairobi, KE';
-    const preset = COVER_PRESETS[eventType];
+  const handleSubmit = async () => {
+    if (isCreating) return;
+    setIsCreating(true);
+    try {
+      const finalName =
+        name.trim() || `${eventType === 'Custom' && customType.trim() ? customType.trim() : eventType} Getaway`;
+      const finalLocation = location.trim() || 'Nairobi, KE';
+      const preset = COVER_PRESETS[eventType];
 
-    const guests: Guest[] = manualGuests.map((m, idx) => {
-      const parts = m.name.split(' ');
-      const initials = (
-        (parts[0]?.[0] || 'G') + (parts[1]?.[0] || parts[0]?.[1] || '')
-      ).toUpperCase();
-      return {
-        id: `g-m-${Date.now()}-${idx}`,
-        name: m.name,
-        phone: m.phone,
-        email: m.email,
-        initials,
-        avatarColor: '#1A6BFF',
-        amount: costPerPerson,
-        paid: false,
-        online: false,
+      let resolvedCoverImage = preset.image;
+      if (coverFile) {
+        resolvedCoverImage = isGuestMode
+          ? coverPreviewUrl || preset.image
+          : await uploadFileToStorage(coverFile, 'covers');
+      }
+
+      const guests: Guest[] = manualGuests.map((m, idx) => {
+        const parts = m.name.split(' ');
+        const initials = (
+          (parts[0]?.[0] || 'G') + (parts[1]?.[0] || parts[0]?.[1] || '')
+        ).toUpperCase();
+        return {
+          id: `g-m-${Date.now()}-${idx}`,
+          name: m.name,
+          phone: m.phone,
+          email: m.email,
+          initials,
+          avatarColor: '#1A6BFF',
+          amount: costPerPerson,
+          paid: false,
+          online: false,
+        };
+      });
+
+      const newEvent: MonteEvent = {
+        id: `evt-${Date.now()}`,
+        name: finalName,
+        type: eventType,
+        customType: eventType === 'Custom' ? customType.trim() || 'Custom Event' : undefined,
+        date,
+        location: finalLocation,
+        description:
+          description.trim() ||
+          'Planned on Monte Events! Confirm your payment in the Guests tab and hop into the chat.',
+        coverImage: resolvedCoverImage,
+        coverGradient: preset.gradient,
+        totalBudget,
+        maxGuests: Math.max(maxGuests, guests.length),
+        costPerPerson,
+        inviteCode,
+        unreadCount: 0,
+        createdBy: creatorName,
+        hostId: creatorId || undefined,
+        hostEmail: creatorEmail || undefined,
+        mpesaType: mpesaNumber.trim() ? mpesaType : undefined,
+        mpesaNumber: mpesaNumber.trim() || undefined,
+        mpesaAccount:
+          mpesaType === 'paybill' && mpesaAccount.trim()
+            ? mpesaAccount.trim()
+            : undefined,
+        mpesaName: mpesaName.trim() || undefined,
+        expenses: [],
+        budgetBreakdown: {
+          Transport: Math.round(totalBudget * 0.3),
+          Food: Math.round(totalBudget * 0.25),
+          Venue: Math.round(totalBudget * 0.25),
+          DJ: Math.round(totalBudget * 0.12),
+          Misc: Math.round(totalBudget * 0.08),
+        },
+        guests,
       };
-    });
 
-    const newEvent: MonteEvent = {
-      id: `evt-${Date.now()}`,
-      name: finalName,
-      type: eventType,
-      customType: eventType === 'Custom' ? customType.trim() || 'Custom Event' : undefined,
-      date,
-      location: finalLocation,
-      description:
-        description.trim() ||
-        'Planned on Monte Events! Confirm your payment in the Guests tab and hop into the chat.',
-      coverImage: preset.image,
-      coverGradient: preset.gradient,
-      totalBudget,
-      maxGuests: Math.max(maxGuests, guests.length),
-      costPerPerson,
-      inviteCode,
-      unreadCount: 0,
-      createdBy: creatorName,
-      hostId: creatorId || undefined,
-      hostEmail: creatorEmail || undefined,
-      mpesaType: mpesaNumber.trim() ? mpesaType : undefined,
-      mpesaNumber: mpesaNumber.trim() || undefined,
-      mpesaAccount:
-        mpesaType === 'paybill' && mpesaAccount.trim()
-          ? mpesaAccount.trim()
-          : undefined,
-      mpesaName: mpesaName.trim() || undefined,
-      expenses: [],
-      budgetBreakdown: {
-        Transport: Math.round(totalBudget * 0.3),
-        Food: Math.round(totalBudget * 0.25),
-        Venue: Math.round(totalBudget * 0.25),
-        DJ: Math.round(totalBudget * 0.12),
-        Misc: Math.round(totalBudget * 0.08),
-      },
-      guests,
-    };
-
-    onCreateEvent(newEvent);
+      onCreateEvent(newEvent);
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   return (
@@ -442,6 +489,76 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
                     placeholder="Share departure times, dress code, activities, or what’s included..."
                     className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-4 py-3 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none resize-none"
                   />
+                </div>
+
+                {/* Event Cover Image Upload (used on Room Header & Auto-Generated Flyer) */}
+                <div className="sm:col-span-2 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70">
+                      Event Cover &amp; Flyer Image (Optional)
+                    </label>
+                    {coverPreviewUrl && (
+                      <button
+                        type="button"
+                        onClick={handleClearCover}
+                        className="text-xs font-bold text-red-500 hover:text-red-600 transition"
+                      >
+                        Remove custom image
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    ref={coverInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleSelectCoverFile(e.target.files?.[0])}
+                  />
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDraggingCover(true);
+                    }}
+                    onDragLeave={() => setIsDraggingCover(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDraggingCover(false);
+                      handleSelectCoverFile(e.dataTransfer.files?.[0]);
+                    }}
+                    onClick={() => coverInputRef.current?.click()}
+                    className={`group relative cursor-pointer overflow-hidden rounded-2xl border-2 border-dashed transition ${
+                      isDraggingCover
+                        ? 'border-[#1A6BFF] bg-[#1A6BFF]/10'
+                        : 'border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] hover:border-[#1A6BFF]'
+                    }`}
+                  >
+                    <div className="relative h-44 sm:h-48 w-full">
+                      <img
+                        src={coverPreviewUrl || COVER_PRESETS[eventType].image}
+                        alt="Event cover preview"
+                        className="h-full w-full object-cover opacity-85 group-hover:opacity-75 transition"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#0A1430]/85 via-[#0A1430]/35 to-transparent flex flex-col items-center justify-center p-4 text-center text-white">
+                        <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#1A6BFF]/90 shadow-lg mb-2 group-hover:scale-105 transition">
+                          {coverPreviewUrl ? (
+                            <ImageIcon className="h-5 w-5" />
+                          ) : (
+                            <UploadCloud className="h-5 w-5" />
+                          )}
+                        </span>
+                        <p className="text-sm font-extrabold">
+                          {coverPreviewUrl
+                            ? 'Click or drop to change event photo'
+                            : 'Upload Event Photo for Your Room & Flyer'}
+                        </p>
+                        <p className="text-[11px] text-white/80 mt-0.5">
+                          {coverPreviewUrl && coverFile
+                            ? `${coverFile.name} — ready for your event flyer`
+                            : `PNG, JPG, or WebP • Using default ${eventType} cover if skipped`}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -713,10 +830,20 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
               <button
                 type="button"
                 onClick={handleSubmit}
-                className="inline-flex items-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-7 py-3.5 text-sm font-extrabold text-white shadow-monte transition active:scale-95"
+                disabled={isCreating}
+                className="inline-flex items-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] disabled:opacity-60 px-7 py-3.5 text-sm font-extrabold text-white shadow-monte transition active:scale-95"
               >
-                <Sparkles className="h-4 w-4" />
-                Create Room
+                {isCreating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Creating Room &amp; Flyer…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    Create Room &amp; Generate Flyer
+                  </>
+                )}
               </button>
             </div>
             </motion.div>

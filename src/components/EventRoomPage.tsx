@@ -17,6 +17,7 @@ import {
   Share2,
   ShieldCheck,
   Smartphone,
+  Sparkles,
   Trash2,
   UploadCloud,
   UserMinus,
@@ -86,6 +87,7 @@ interface EventRoomPageProps {
   onToggleReaction: (eventId: string, messageId: string, emoji: string) => void;
   onTogglePin: (eventId: string, messageId: string) => void;
   onSelectMedia: (item: MediaItem) => void;
+  onOpenFlyer?: (event: MonteEvent) => void;
   onShowToast: (msg: string) => void;
 }
 
@@ -112,6 +114,7 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
   onToggleReaction,
   onTogglePin,
   onSelectMedia,
+  onOpenFlyer,
   onShowToast,
 }) => {
   const [guestSearch, setGuestSearch] = useState('');
@@ -435,6 +438,16 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
                   Join Room
                 </button>
               )}
+            {onOpenFlyer && (
+              <button
+                type="button"
+                onClick={() => onOpenFlyer(event)}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] border border-white/25 px-4 py-2.5 text-xs sm:text-sm font-extrabold text-white shadow-lg transition active:scale-95"
+              >
+                <Sparkles className="h-4 w-4" />
+                Event Flyer
+              </button>
+            )}
             <button
               type="button"
               onClick={handleCopyLink}
