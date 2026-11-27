@@ -13,7 +13,9 @@ import {
   fetchMediaFromApi,
   fetchRoomMessagesFromApi,
   fetchRoomsFromApi,
+  joinRoomOnApi,
   sendRoomMessageOnApi,
+  sendWelcomeEmailOnApi,
   toggleGuestPaymentOnApi,
 } from './lib/api';
 import {
@@ -55,6 +57,7 @@ import {
 } from './types';
 import { AuthPage } from './components/AuthPage';
 import { EmailVerifiedPage } from './components/EmailVerifiedPage';
+import { ResetPasswordModal } from './components/ResetPasswordModal';
 import { AppShell } from './components/AppShell';
 import { DashboardPage } from './components/DashboardPage';
 import { CreateRoomPage } from './components/CreateRoomPage';
@@ -83,9 +86,21 @@ function detectEmailVerifiedFromUrl(): boolean {
   return false;
 }
 
+function detectResetPasswordFromUrl(): boolean {
+  if (typeof window === 'undefined') return false;
+  const search = new URLSearchParams(window.location.search);
+  const hash = window.location.hash || '';
+  if (search.get('reset') === 'true') return true;
+  if (hash.includes('type=recovery')) return true;
+  return false;
+}
+
 function MonteAppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isGuestMode, setIsGuestMode] = useState(false);
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState<boolean>(
+    () => detectResetPasswordFromUrl()
+  );
   const [authModal, setAuthModal] = useState<{
     open: boolean;
     mode: 'login' | 'signup';
@@ -116,6 +131,7 @@ function MonteAppContent() {
       sessionUser: {
         id: string;
         email?: string;
+        created_at?: string;
         user_metadata?: Record<string, unknown>;
       } | null
     ) => {
@@ -138,6 +154,22 @@ function MonteAppContent() {
         'Monte Member';
       const googleAvatar =
         (meta.avatar_url as string) || (meta.picture as string) || '';
+
+      // Send one-time Welcome email on first-time Google / OAuth signup
+      if (sessionUser.email && typeof window !== 'undefined') {
+        const welcomeKey = `monte-welcome-sent-${uid}`;
+        if (!window.localStorage.getItem(welcomeKey)) {
+          const createdAtMs = sessionUser.created_at
+            ? Date.parse(sessionUser.created_at)
+            : 0;
+          const isRecentSignup =
+            createdAtMs > 0 && Date.now() - createdAtMs < 15 * 60 * 1000;
+          if (isRecentSignup) {
+            window.localStorage.setItem(welcomeKey, '1');
+            void sendWelcomeEmailOnApi(sessionUser.email, googleName);
+          }
+        }
+      }
       const parts = googleName.trim().split(/\s+/);
       const initials = (
         (parts[0]?.[0] || 'M') + (parts[1]?.[0] || parts[0]?.[1] || 'E')
@@ -201,11 +233,14 @@ function MonteAppContent() {
       }
     };
 
-    // Listen for Google OAuth / Magic Link / Sign Out auth state changes
+    // Listen for Google OAuth / Magic Link / Password Recovery / Sign Out auth state changes
     const {
       data: { subscription: authSubscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
+      if (event === 'PASSWORD_RECOVERY') {
+        setShowResetPasswordModal(true);
+      }
       if (session?.user) {
         void applySupabaseSessionUser(session.user);
       } else if (event === 'SIGNED_OUT') {
@@ -624,6 +659,70 @@ function MonteAppContent() {
     );
   };
 
+  const handleJoinRoom = useCallback(
+    async (roomId: string) => {
+      if (isGuestMode) {
+        promptGuestToSignUp(
+          'Create a free account to join this room and receive event updates.'
+        );
+        return;
+      }
+      const res = await joinRoomOnApi(roomId, {
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+      });
+      if (res.ok && res.guest) {
+        setEvents((prev) =>
+          prev.map((ev) => {
+            if (ev.id !== roomId) return ev;
+            const alreadyIn = ev.guests.some(
+              (g) =>
+                g.id === res.guest!.id ||
+                (user.email && g.email === user.email)
+            );
+            if (alreadyIn) return ev;
+            return { ...ev, guests: [...ev.guests, res.guest!] };
+          })
+        );
+        showToast(
+          res.emailSent
+            ? 'You joined the room! Check your email for confirmation.'
+            : 'You joined the room!',
+          'success'
+        );
+      }
+    },
+    [isGuestMode, promptGuestToSignUp, showToast, user.email, user.name, user.phone]
+  );
+
+  // Handle ?room=<id> or ?join=<code> invite links when signed in and rooms are loaded
+  useEffect(() => {
+    if (!isAuthenticated || isGuestMode || events.length === 0) return;
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const joinCode = params.get('join');
+    const roomParam = params.get('room');
+    if (!joinCode && !roomParam) return;
+
+    const matched = joinCode
+      ? events.find(
+          (e) => e.inviteCode.toLowerCase() === joinCode.trim().toLowerCase()
+        )
+      : events.find((e) => e.id === roomParam);
+
+    if (matched) {
+      setActiveEventId(matched.id);
+      setActiveEventTab('guests');
+      setCurrentPage('event-room');
+      if (joinCode) {
+        void handleJoinRoom(matched.id);
+      }
+      const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
+  }, [isAuthenticated, isGuestMode, events, handleJoinRoom]);
+
   const handleAddGuestToEvent = (eventId: string, guest: Guest) => {
     if (isGuestMode) {
       promptGuestToSignUp(
@@ -876,6 +975,7 @@ function MonteAppContent() {
               typingUser={typingByEvent[activeEvent.id] || null}
               onBack={() => setCurrentPage('rooms')}
               onDeleteEvent={handleDeleteEvent}
+              onJoinRoom={handleJoinRoom}
               onToggleGuestPaid={handleToggleGuestPaid}
               onAddGuestToEvent={handleAddGuestToEvent}
               onUploadMedia={handleUploadMedia}
@@ -948,6 +1048,26 @@ function MonteAppContent() {
           onShowToast={showToast}
         />
       )}
+
+      {/* Set New Password Modal (?reset=true or PASSWORD_RECOVERY) */}
+      <ResetPasswordModal
+        open={showResetPasswordModal}
+        onClose={() => {
+          setShowResetPasswordModal(false);
+          if (typeof window !== 'undefined') {
+            const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+            window.history.replaceState({}, document.title, cleanUrl);
+          }
+        }}
+        onSuccess={() => {
+          setShowResetPasswordModal(false);
+          if (typeof window !== 'undefined') {
+            const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+            window.history.replaceState({}, document.title, cleanUrl);
+          }
+          showToast('Password updated successfully!', 'success');
+        }}
+      />
 
       <MediaLightbox
         items={lightboxState?.items || []}

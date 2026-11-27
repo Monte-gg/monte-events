@@ -374,7 +374,7 @@ export async function deleteAccountOnApi(
   accessToken: string
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/account`, {
+    const res = await fetch(`${API_BASE_URL}/api/auth/delete-account`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
@@ -391,5 +391,72 @@ export async function deleteAccountOnApi(
       ok: false,
       error: err instanceof Error ? err.message : 'Unable to reach server',
     };
+  }
+}
+
+export async function sendWelcomeEmailOnApi(
+  email: string,
+  name?: string
+): Promise<void> {
+  if (!email) return;
+  try {
+    await fetchJson(
+      '/api/emails/welcome',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email, name: name || '' }),
+      },
+      8000
+    );
+  } catch {
+    // Non-blocking background email
+  }
+}
+
+export async function requestPasswordResetOnApi(
+  email: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await fetchJson(
+      '/api/auth/forgot-password',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      },
+      10000
+    );
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Unable to reach server',
+    };
+  }
+}
+
+export async function joinRoomOnApi(
+  roomId: string,
+  payload: { name: string; email?: string; phone?: string }
+): Promise<{ ok: boolean; guest?: Guest; emailSent?: boolean }> {
+  try {
+    const data = await fetchJson<{
+      ok: boolean;
+      guest?: RawGuest;
+      emailSent?: boolean;
+    }>(
+      `/api/rooms/${encodeURIComponent(roomId)}/join`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      },
+      10000
+    );
+    return {
+      ok: Boolean(data.ok),
+      guest: data.guest ? mapGuest(data.guest) : undefined,
+      emailSent: Boolean(data.emailSent),
+    };
+  } catch {
+    return { ok: false };
   }
 }

@@ -2,6 +2,12 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { supabase, isSupabaseConfigured } from './supabase.js';
+import {
+  sendAccountDeletedEmail,
+  sendPasswordResetEmail,
+  sendRoomJoinedEmail,
+  sendWelcomeEmail,
+} from './mailer.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -286,10 +292,111 @@ app.post('/api/rooms/:id/guests', async (req, res) => {
       .single();
 
     if (error) throw error;
+
+    // Non-blocking room join confirmation email if guest has an email
+    if (email) {
+      supabase
+        .from('rooms')
+        .select('*')
+        .eq('id', id)
+        .single()
+        .then(({ data: room }) => {
+          if (room) {
+            void sendRoomJoinedEmail({
+              email,
+              name,
+              room,
+              frontendUrl: FRONTEND_URL,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+
     res.status(201).json({ guest: data });
   } catch (err) {
     console.error('POST /api/rooms/:id/guests failed:', err);
     res.status(500).json({ error: err.message || 'Failed to add guest' });
+  }
+});
+
+// POST /api/rooms/:id/join — join a room and send confirmation email via Brevo
+app.post('/api/rooms/:id/join', async (req, res) => {
+  if (!requireSupabase(res)) return;
+  try {
+    const { id } = req.params;
+    const { name, email = '', phone = '' } = req.body || {};
+
+    const { data: room, error: roomErr } = await supabase
+      .from('rooms')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (roomErr || !room) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+
+    const guestName = name || (email ? email.split('@')[0] : 'Monte Guest');
+    const initials = String(guestName)
+      .split(/\s+/)
+      .map((p) => p[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase();
+
+    // Check if guest with same email already exists in room
+    let guestRecord = null;
+    if (email) {
+      const { data: existing } = await supabase
+        .from('guests')
+        .select('*')
+        .eq('room_id', id)
+        .eq('email', email)
+        .maybeSingle();
+      guestRecord = existing;
+    }
+
+    if (!guestRecord) {
+      const { data: inserted, error: insertErr } = await supabase
+        .from('guests')
+        .insert({
+          room_id: id,
+          name: guestName,
+          email,
+          phone,
+          initials,
+          avatar_color: '#1A6BFF',
+          amount: Number(room.cost_per_person || 0),
+          paid: false,
+          online: true,
+        })
+        .select()
+        .single();
+
+      if (insertErr) throw insertErr;
+      guestRecord = inserted;
+    }
+
+    let emailResult = { sent: false };
+    if (email) {
+      emailResult = await sendRoomJoinedEmail({
+        email,
+        name: guestName,
+        room,
+        frontendUrl: FRONTEND_URL,
+      });
+    }
+
+    res.status(201).json({
+      ok: true,
+      guest: guestRecord,
+      room,
+      emailSent: Boolean(emailResult.sent),
+    });
+  } catch (err) {
+    console.error('POST /api/rooms/:id/join failed:', err);
+    res.status(500).json({ error: err.message || 'Failed to join room' });
   }
 });
 
@@ -488,8 +595,61 @@ app.post('/api/media', async (req, res) => {
   }
 });
 
-// DELETE /api/account — securely delete the authenticated user's own account
-app.delete('/api/account', async (req, res) => {
+// 1. POST /api/emails/welcome — send branded welcome email via Brevo
+app.post('/api/emails/welcome', async (req, res) => {
+  try {
+    const { email, name = '' } = req.body || {};
+    if (!email) {
+      return res.status(400).json({ error: 'email is required' });
+    }
+    const result = await sendWelcomeEmail({
+      email,
+      name,
+      frontendUrl: FRONTEND_URL,
+    });
+    res.json({ ok: true, sent: Boolean(result.sent) });
+  } catch (err) {
+    console.error('POST /api/emails/welcome failed:', err);
+    res.json({ ok: true, sent: false });
+  }
+});
+
+// 2. POST /api/auth/forgot-password — generate Supabase recovery link & email via Brevo
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!email || !isSupabaseConfigured || !supabase) {
+      return res.json({ ok: true });
+    }
+
+    const { data, error } = await supabase.auth.admin.generateLink({
+      type: 'recovery',
+      email: String(email).trim(),
+      options: {
+        redirectTo: `${FRONTEND_URL}/?reset=true`,
+      },
+    });
+
+    if (!error && data?.properties?.action_link) {
+      await sendPasswordResetEmail({
+        email: String(email).trim(),
+        name: data.user?.user_metadata?.full_name || '',
+        resetLink: data.properties.action_link,
+      });
+    } else if (error) {
+      console.warn('[forgot-password] generateLink note:', error.message);
+    }
+
+    // Always return { ok: true } for security
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('POST /api/auth/forgot-password failed:', err);
+    res.json({ ok: true });
+  }
+});
+
+// 3. DELETE /api/auth/delete-account (and /api/account alias) — delete own account + send Brevo confirmation
+async function handleDeleteAccount(req, res) {
   if (!requireSupabase(res)) return;
   try {
     const authHeader = req.headers.authorization || '';
@@ -510,7 +670,10 @@ app.delete('/api/account', async (req, res) => {
       return res.status(401).json({ error: 'Invalid or expired session token' });
     }
 
-    const userId = userData.user.id;
+    const user = userData.user;
+    const userId = user.id;
+    const userEmail = user.email;
+    const userName = user.user_metadata?.full_name || user.user_metadata?.name || '';
 
     // Best-effort cleanup of profile row if table exists
     try {
@@ -522,12 +685,24 @@ app.delete('/api/account', async (req, res) => {
     const { error: deleteErr } = await supabase.auth.admin.deleteUser(userId);
     if (deleteErr) throw deleteErr;
 
+    // Send confirmation email via Brevo (non-fatal if Brevo fails)
+    if (userEmail) {
+      await sendAccountDeletedEmail({
+        email: userEmail,
+        name: userName,
+        frontendUrl: FRONTEND_URL,
+      });
+    }
+
     res.json({ ok: true, deletedUserId: userId });
   } catch (err) {
-    console.error('DELETE /api/account failed:', err);
+    console.error('DELETE /api/auth/delete-account failed:', err);
     res.status(500).json({ error: err.message || 'Failed to delete account' });
   }
-});
+}
+
+app.delete('/api/auth/delete-account', handleDeleteAccount);
+app.delete('/api/account', handleDeleteAccount);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(

@@ -49,6 +49,7 @@ interface EventRoomPageProps {
   typingUser?: string | null;
   onBack: () => void;
   onDeleteEvent: (eventId: string) => void;
+  onJoinRoom?: (eventId: string) => void;
   onToggleGuestPaid: (eventId: string, guestId: string) => void;
   onAddGuestToEvent: (eventId: string, guest: Guest) => void;
   onUploadMedia: (eventId: string, items: MediaItem[]) => void;
@@ -76,6 +77,7 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
   typingUser,
   onBack,
   onDeleteEvent,
+  onJoinRoom,
   onToggleGuestPaid,
   onAddGuestToEvent,
   onUploadMedia,
@@ -331,24 +333,41 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleCopyLink}
-            className="shrink-0 inline-flex items-center justify-center gap-2 rounded-2xl bg-white text-[#0B2E8F] hover:bg-[#F0F6FF] px-5 py-3 text-xs sm:text-sm font-extrabold shadow-lg transition active:scale-95"
-          >
-            {copiedInvite ? (
-              <>
-                <Check className="h-4 w-4 text-emerald-600" />
-                Copied!
-              </>
-            ) : (
-              <>
-                <Share2 className="h-4 w-4 text-[#1A6BFF]" />
-                Share Invite Link
-                <Copy className="h-3.5 w-3.5 opacity-70" />
-              </>
-            )}
-          </button>
+          <div className="shrink-0 flex flex-wrap items-center gap-2">
+            {onJoinRoom &&
+              !event.guests.some(
+                (g) =>
+                  (user.email && g.email === user.email) ||
+                  g.name.toLowerCase() === user.name.toLowerCase()
+              ) && (
+                <button
+                  type="button"
+                  onClick={() => onJoinRoom(event.id)}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] border border-white/25 px-5 py-3 text-xs sm:text-sm font-extrabold text-white shadow-lg transition active:scale-95"
+                >
+                  <Plus className="h-4 w-4" />
+                  Join Room
+                </button>
+              )}
+            <button
+              type="button"
+              onClick={handleCopyLink}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white text-[#0B2E8F] hover:bg-[#F0F6FF] px-5 py-3 text-xs sm:text-sm font-extrabold shadow-lg transition active:scale-95"
+            >
+              {copiedInvite ? (
+                <>
+                  <Check className="h-4 w-4 text-emerald-600" />
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <Share2 className="h-4 w-4 text-[#1A6BFF]" />
+                  Share Invite Link
+                  <Copy className="h-3.5 w-3.5 opacity-70" />
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 

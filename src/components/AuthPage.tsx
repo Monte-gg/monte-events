@@ -20,6 +20,7 @@ import { MonteLogo } from './MonteLogo';
 import { ThemeToggle } from './ThemeToggle';
 import { EASE_SKIPER, MagneticButton, SPRING_SNAPPY } from './MotionPrimitives';
 import { signInWithEmail, signUpWithEmail } from '../lib/monteService';
+import { requestPasswordResetOnApi, sendWelcomeEmailOnApi } from '../lib/api';
 import { supabase } from '../lib/supabaseClient.js';
 
 interface AuthPageProps {
@@ -59,6 +60,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [googleLoading, setGoogleLoading] = useState(false);
   const [magicLinkLoading, setMagicLinkLoading] = useState(false);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
@@ -109,8 +112,29 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   // Bug Fix #2: Clear inline auth errors on tab switch
   const handleSwitchMode = (nextMode: 'login' | 'signup') => {
     setMode(nextMode);
+    setForgotMode(false);
     setAuthError(null);
     setAuthNotice(null);
+  };
+
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = email.trim();
+    if (!trimmed || !trimmed.includes('@')) {
+      setAuthError('Please enter your email address.');
+      return;
+    }
+    setResetLoading(true);
+    setAuthError(null);
+    setAuthNotice(null);
+    const res = await requestPasswordResetOnApi(trimmed);
+    setResetLoading(false);
+    if (!res.ok) {
+      setAuthError(res.error || 'Could not send reset link. Please try again.');
+      return;
+    }
+    setAuthNotice('Check your inbox for your reset link');
+    onShowToast?.('Check your inbox for your reset link', 'success');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -135,6 +159,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           setAuthError(error.message);
           return;
         }
+        // Fire non-blocking welcome email via Brevo
+        void sendWelcomeEmailOnApi(email.trim(), name.trim());
         if (data.session && data.user) {
           onLogin({
             userId: data.user.id,
@@ -440,6 +466,76 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         })}
       </div>
 
+      {forgotMode ? (
+        <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <h3 className="text-base font-extrabold text-[#0A1E5C] dark:text-white">
+              Reset your password
+            </h3>
+            <p className="text-xs text-[#0A1E5C]/65 dark:text-white/65">
+              Enter your email address and we’ll send you a Monte Events password reset link.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70 mb-1.5">
+              Email Address
+            </label>
+            <div className="relative">
+              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#1A6BFF] dark:text-[#2B7FFF]" />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (authError) setAuthError(null);
+                }}
+                placeholder="you@example.com"
+                required
+                className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] pl-10 pr-4 py-2.5 text-sm text-[#0A1E5C] dark:text-white placeholder:text-[#0A1E5C]/40 dark:placeholder:text-white/40 focus:border-[#1A6BFF] focus:outline-none focus:ring-2 focus:ring-[#1A6BFF]/20"
+              />
+            </div>
+          </div>
+
+          {authError && (
+            <p className="rounded-xl border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400">
+              {authError}
+            </p>
+          )}
+
+          {authNotice && (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              <span>{authNotice}</span>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={resetLoading}
+            className="w-full flex items-center justify-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] disabled:opacity-60 py-3.5 text-sm font-extrabold text-white shadow-monte transition"
+          >
+            {resetLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Mail className="h-4 w-4" />
+            )}
+            {resetLoading ? 'Sending Reset Link…' : 'Send Reset Link'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setForgotMode(false);
+              setAuthError(null);
+              setAuthNotice(null);
+            }}
+            className="w-full text-center text-xs font-bold text-[#1A6BFF] dark:text-[#2B7FFF] hover:underline"
+          >
+            Back to Log In
+          </button>
+        </form>
+      ) : (
       <form onSubmit={handleSubmit} className="space-y-4">
         {mode === 'signup' && (
           <div>
@@ -531,6 +627,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
+          {mode === 'login' && (
+            <div className="mt-1.5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setForgotMode(true);
+                  setAuthError(null);
+                  setAuthNotice(null);
+                }}
+                className="text-xs font-bold text-[#1A6BFF] dark:text-[#2B7FFF] hover:underline"
+              >
+                Forgot password?
+              </button>
+            </div>
+          )}
         </div>
 
         {authError && (
@@ -564,6 +675,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           <ArrowRight className="h-4 w-4" />
         </button>
       </form>
+      )}
 
       {/* Divider with whitespace-nowrap */}
       <div className="relative my-5 flex items-center justify-center gap-3">
