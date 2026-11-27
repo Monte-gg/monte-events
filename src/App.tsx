@@ -69,6 +69,7 @@ import { EventRoomPage } from './components/EventRoomPage';
 import { GlobalChatsPage } from './components/GlobalChatsPage';
 import { MyRoomsPage } from './components/MyRoomsPage';
 import { MembersPage } from './components/MembersPage';
+import { MemberProfileModal } from './components/MemberProfileModal';
 import { MediaVaultPage } from './components/MediaVaultPage';
 import { ProfilePage } from './components/ProfilePage';
 import { MediaLightbox } from './components/MediaLightbox';
@@ -147,6 +148,7 @@ function MonteAppContent() {
   });
   const [activeChatSection, setActiveChatSection] = useState<'events' | 'friends'>('events');
   const [activeFriendId, setActiveFriendId] = useState<string | null>(null);
+  const [viewingMember, setViewingMember] = useState<PlatformMember | null>(null);
   const [media, setMedia] = useState<MediaItem[]>(INITIAL_MEDIA);
   const [messagesByEvent, setMessagesByEvent] =
     useState<Record<string, ChatMessage[]>>(INITIAL_MESSAGES);
@@ -1158,6 +1160,7 @@ function MonteAppContent() {
               onTogglePin={handleTogglePin}
               onAddGuestToEvent={handleAddGuestToEvent}
               onSelectMedia={handleSelectMedia}
+              onViewMemberProfile={setViewingMember}
               onGoToMembers={() => setCurrentPage('members')}
               onShowToast={showToast}
             />
@@ -1173,6 +1176,7 @@ function MonteAppContent() {
               onRefresh={handleRefreshMembers}
               onAddFriend={handleAddFriend}
               onStartFriendChat={handleStartFriendChat}
+              onViewMemberProfile={setViewingMember}
               onInviteMemberToRoom={handleInviteMemberToRoom}
               onCreateRoom={() => setCurrentPage('create')}
             />
@@ -1240,6 +1244,26 @@ function MonteAppContent() {
           }
           showToast('Password updated successfully!', 'success');
         }}
+      />
+
+      {/* Member / Friend Profile Modal */}
+      <MemberProfileModal
+        member={viewingMember}
+        isFriend={
+          Boolean(viewingMember) &&
+          friends.some((f) => f.id === viewingMember!.id)
+        }
+        isMe={
+          Boolean(viewingMember?.email) &&
+          Boolean(user.email) &&
+          viewingMember!.email!.toLowerCase() === user.email.toLowerCase()
+        }
+        events={events}
+        onClose={() => setViewingMember(null)}
+        onAddFriend={handleAddFriend}
+        onStartChat={handleStartFriendChat}
+        onInviteToRoom={handleInviteMemberToRoom}
+        onOpenEvent={(eventId) => handleOpenEvent(eventId, 'guests')}
       />
 
       <MediaLightbox

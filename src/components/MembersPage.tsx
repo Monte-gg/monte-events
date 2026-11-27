@@ -25,6 +25,7 @@ interface MembersPageProps {
   onRefresh: () => void;
   onAddFriend: (member: PlatformMember) => void;
   onStartFriendChat: (member: PlatformMember) => void;
+  onViewMemberProfile: (member: PlatformMember) => void;
   onInviteMemberToRoom: (roomId: string, member: PlatformMember) => void;
   onCreateRoom: () => void;
 }
@@ -56,6 +57,7 @@ export const MembersPage: React.FC<MembersPageProps> = ({
   onRefresh,
   onAddFriend,
   onStartFriendChat,
+  onViewMemberProfile,
   onInviteMemberToRoom,
   onCreateRoom,
 }) => {
@@ -198,11 +200,15 @@ export const MembersPage: React.FC<MembersPageProps> = ({
                 className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-5 shadow-sm hover:shadow-monte dark:hover:shadow-monte-dark transition-shadow flex flex-col justify-between gap-4"
               >
                 <div className="space-y-3">
-                  {/* Top row: Avatar + Name + Badge */}
-                  <div className="flex items-start justify-between gap-3">
+                  {/* Top row: Clickable Avatar + Name to view profile */}
+                  <button
+                    type="button"
+                    onClick={() => onViewMemberProfile(member)}
+                    className="w-full flex items-start justify-between gap-3 text-left group/profile"
+                  >
                     <div className="flex items-center gap-3 min-w-0">
                       <div
-                        className="h-12 w-12 shrink-0 rounded-2xl overflow-hidden flex items-center justify-center text-white font-extrabold text-sm shadow-sm ring-2 ring-[#1A6BFF]/25"
+                        className="h-12 w-12 shrink-0 rounded-2xl overflow-hidden flex items-center justify-center text-white font-extrabold text-sm shadow-sm ring-2 ring-[#1A6BFF]/25 group-hover/profile:ring-[#1A6BFF] transition"
                         style={{ backgroundColor: bgColor }}
                       >
                         {member.avatarUrl ? (
@@ -217,7 +223,7 @@ export const MembersPage: React.FC<MembersPageProps> = ({
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <h3 className="truncate text-sm sm:text-base font-extrabold text-[#0A1E5C] dark:text-white">
+                          <h3 className="truncate text-sm sm:text-base font-extrabold text-[#0A1E5C] dark:text-white group-hover/profile:text-[#1A6BFF] dark:group-hover/profile:text-[#2B7FFF] transition-colors">
                             {member.name}
                           </h3>
                           {isMe && (
@@ -231,7 +237,10 @@ export const MembersPage: React.FC<MembersPageProps> = ({
                         </p>
                       </div>
                     </div>
-                  </div>
+                    <span className="shrink-0 rounded-full bg-[#F0F6FF] dark:bg-[#0B1A3A] px-2.5 py-1 text-[10px] font-extrabold text-[#1A6BFF] dark:text-[#2B7FFF] opacity-80 group-hover/profile:opacity-100">
+                      View Profile
+                    </span>
+                  </button>
 
                   {/* Bio */}
                   <p className="text-xs text-[#0A1E5C]/75 dark:text-white/75 line-clamp-2 leading-relaxed">

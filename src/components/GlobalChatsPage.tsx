@@ -51,6 +51,7 @@ interface GlobalChatsPageProps {
   onTogglePin: (eventId: string, messageId: string) => void;
   onAddGuestToEvent: (eventId: string, guest: Guest) => void;
   onSelectMedia: (item: MediaItem) => void;
+  onViewMemberProfile: (member: PlatformMember) => void;
   onGoToMembers: () => void;
   onShowToast: (msg: string) => void;
 }
@@ -75,6 +76,7 @@ export const GlobalChatsPage: React.FC<GlobalChatsPageProps> = ({
   onTogglePin,
   onAddGuestToEvent,
   onSelectMedia,
+  onViewMemberProfile,
   onGoToMembers,
   onShowToast,
 }) => {
@@ -408,30 +410,43 @@ export const GlobalChatsPage: React.FC<GlobalChatsPageProps> = ({
                   >
                     Back
                   </button>
-                  <div className="relative h-10 w-10 shrink-0 rounded-2xl overflow-hidden bg-[#1A6BFF] flex items-center justify-center text-white font-extrabold text-sm">
-                    {selectedFriend.avatarUrl ? (
-                      <img
-                        src={selectedFriend.avatarUrl}
-                        alt={selectedFriend.name}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <span>{selectedFriend.initials}</span>
-                    )}
-                    <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-[#0B1A3A]" />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="truncate text-sm sm:text-base font-extrabold text-[#0A1E5C] dark:text-white">
-                      {selectedFriend.name}
-                    </h3>
-                    <p className="truncate text-[11px] font-semibold text-[#0A1E5C]/65 dark:text-white/65 inline-flex items-center gap-1.5">
-                      <span>@{selectedFriend.username}</span>
-                      <span>•</span>
-                      <MapPin className="h-3 w-3 text-[#1A6BFF]" />
-                      <span>{selectedFriend.location}</span>
-                    </p>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onViewMemberProfile(selectedFriend)}
+                    className="flex items-center gap-3 min-w-0 text-left group"
+                  >
+                    <div className="relative h-10 w-10 shrink-0 rounded-2xl overflow-hidden bg-[#1A6BFF] flex items-center justify-center text-white font-extrabold text-sm ring-2 ring-transparent group-hover:ring-[#1A6BFF] transition">
+                      {selectedFriend.avatarUrl ? (
+                        <img
+                          src={selectedFriend.avatarUrl}
+                          alt={selectedFriend.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span>{selectedFriend.initials}</span>
+                      )}
+                      <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-[#0B1A3A]" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="truncate text-sm sm:text-base font-extrabold text-[#0A1E5C] dark:text-white group-hover:text-[#1A6BFF] dark:group-hover:text-[#2B7FFF] transition-colors">
+                        {selectedFriend.name}
+                      </h3>
+                      <p className="truncate text-[11px] font-semibold text-[#0A1E5C]/65 dark:text-white/65 inline-flex items-center gap-1.5">
+                        <span>@{selectedFriend.username}</span>
+                        <span>•</span>
+                        <MapPin className="h-3 w-3 text-[#1A6BFF]" />
+                        <span>{selectedFriend.location}</span>
+                      </p>
+                    </div>
+                  </button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => onViewMemberProfile(selectedFriend)}
+                  className="shrink-0 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF] dark:bg-[#13224A] hover:border-[#1A6BFF] px-3 py-1.5 text-xs font-extrabold text-[#1A6BFF] dark:text-[#2B7FFF] transition"
+                >
+                  View Profile
+                </button>
               </div>
 
               {/* DM Messages */}
