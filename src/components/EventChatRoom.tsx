@@ -106,6 +106,11 @@ export const EventChatRoom: React.FC<EventChatRoomProps> = ({
 
   const handleSend = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    const isGuest = user.memberSince === 'Preview Mode';
+    if (isGuest) {
+      onSendMessage(event.id, text.trim());
+      return;
+    }
     if (!text.trim()) return;
     onSendMessage(event.id, text.trim(), {
       replyTo: replyTo || undefined,
@@ -634,7 +639,7 @@ export const EventChatRoom: React.FC<EventChatRoomProps> = ({
 
         <button
           type="submit"
-          disabled={!text.trim()}
+          disabled={!text.trim() && user.memberSince !== 'Preview Mode'}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] disabled:opacity-45 text-white shadow-sm transition active:scale-95"
           aria-label="Send message"
         >

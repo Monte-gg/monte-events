@@ -314,8 +314,21 @@ function MonteAppContent() {
   const [activeChatEventId, setActiveChatEventId] = useState<string | null>(null);
   const [typingByEvent] = useState<Record<string, string | null>>({});
 
-  const [lightboxMedia, setLightboxMedia] = useState<MediaItem | null>(null);
+  const [lightboxState, setLightboxState] = useState<{
+    item: MediaItem;
+    list: MediaItem[];
+  } | null>(null);
   const [toasts, setToasts] = useState<ToastData[]>([]);
+
+  const handleSelectMedia = useCallback(
+    (item: MediaItem, list?: MediaItem[]) => {
+      setLightboxState({
+        item,
+        list: list && list.length > 0 ? list : media,
+      });
+    },
+    [media]
+  );
 
   const showToast = useCallback((message: string, type: 'success' | 'info' = 'success') => {
     const id = `toast-${Date.now()}-${Math.random()}`;
@@ -661,7 +674,7 @@ function MonteAppContent() {
   ) => {
     if (isGuestMode) {
       promptGuestToSignUp(
-        'Create a free account to chat with friends and coordinate events.'
+        'Sign in to chat with your event squad and share updates.'
       );
       return;
     }
@@ -820,7 +833,7 @@ function MonteAppContent() {
               onMarkNotificationsRead={handleMarkNotificationsRead}
               onOpenEvent={handleOpenEvent}
               onNavigate={handleNavigate}
-              onSelectMedia={setLightboxMedia}
+              onSelectMedia={handleSelectMedia}
             />
           )}
 
@@ -859,7 +872,7 @@ function MonteAppContent() {
               onSendMessage={handleSendMessage}
               onToggleReaction={handleToggleReaction}
               onTogglePin={handleTogglePin}
-              onSelectMedia={setLightboxMedia}
+              onSelectMedia={handleSelectMedia}
               onShowToast={showToast}
             />
           )}
@@ -877,7 +890,7 @@ function MonteAppContent() {
               onToggleReaction={handleToggleReaction}
               onTogglePin={handleTogglePin}
               onAddGuestToEvent={handleAddGuestToEvent}
-              onSelectMedia={setLightboxMedia}
+              onSelectMedia={handleSelectMedia}
               onShowToast={showToast}
             />
           )}
@@ -888,7 +901,7 @@ function MonteAppContent() {
               media={media}
               user={user}
               onUploadMedia={handleUploadMedia}
-              onSelectMedia={setLightboxMedia}
+              onSelectMedia={handleSelectMedia}
               onShowToast={showToast}
             />
           )}
@@ -903,7 +916,7 @@ function MonteAppContent() {
               onPromptAuth={promptGuestToSignUp}
               onUpdateProfile={handleUpdateProfile}
               onOpenEvent={handleOpenEvent}
-              onSelectMedia={setLightboxMedia}
+              onSelectMedia={handleSelectMedia}
               onLogout={handleLogout}
               onDeleteAccount={handleDeleteAccount}
               onShowToast={showToast}
@@ -927,10 +940,12 @@ function MonteAppContent() {
       )}
 
       <MediaLightbox
-        item={lightboxMedia}
-        items={media}
-        onNavigate={setLightboxMedia}
-        onClose={() => setLightboxMedia(null)}
+        item={lightboxState?.item || null}
+        items={lightboxState?.list || []}
+        onNavigate={(nextItem) =>
+          setLightboxState((prev) => (prev ? { ...prev, item: nextItem } : null))
+        }
+        onClose={() => setLightboxState(null)}
       />
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </>

@@ -11,7 +11,7 @@ interface MediaVaultPageProps {
   media: MediaItem[];
   user: UserProfile;
   onUploadMedia: (eventId: string, items: MediaItem[]) => void;
-  onSelectMedia: (item: MediaItem) => void;
+  onSelectMedia: (item: MediaItem, filteredList?: MediaItem[]) => void;
   onShowToast: (msg: string) => void;
 }
 
@@ -208,7 +208,7 @@ export const MediaVaultPage: React.FC<MediaVaultPageProps> = ({
               whileHover={{ y: -3, scale: 1.02 }}
               whileTap={{ scale: 0.97 }}
               transition={{ duration: 0.24, ease: EASE_SKIPER }}
-              onClick={() => onSelectMedia(item)}
+              onClick={() => onSelectMedia(item, filtered)}
               className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#0B2E8F] text-left shadow-sm"
             >
               <img

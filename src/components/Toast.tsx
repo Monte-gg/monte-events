@@ -19,15 +19,15 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({
   onDismiss,
 }) => {
   return (
-    <div className="fixed bottom-20 md:bottom-6 right-4 z-[100] flex flex-col gap-2 max-w-sm w-[calc(100%-2rem)] pointer-events-none">
+    <div className="fixed top-16 md:top-5 right-4 z-[100] flex flex-col gap-2 max-w-sm w-[calc(100%-2rem)] pointer-events-none">
       <AnimatePresence initial={false}>
         {toasts.map((t) => (
           <motion.div
             key={t.id}
             layout
-            initial={{ opacity: 0, y: 24, scale: 0.94 }}
+            initial={{ opacity: 0, y: -16, scale: 0.94 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.95 }}
+            exit={{ opacity: 0, y: -12, scale: 0.95 }}
             transition={SPRING_SNAPPY}
             className="pointer-events-auto relative overflow-hidden rounded-2xl border border-[#2B7FFF]/35 bg-[#0A1E5C] dark:bg-[#13224A] px-4 py-3 text-white shadow-xl"
           >
