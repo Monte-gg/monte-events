@@ -16,6 +16,7 @@ import { SPRING_SNAPPY, ScrollProgressBar } from './MotionPrimitives';
 
 interface MyRoomsPageProps {
   events: MonteEvent[];
+  isRoomHost: (event: MonteEvent) => boolean;
   onOpenEvent: (eventId: string, tab?: EventRoomTab) => void;
   onDeleteEvent: (eventId: string) => void;
   onCreateRoom: () => void;
@@ -23,6 +24,7 @@ interface MyRoomsPageProps {
 
 export const MyRoomsPage: React.FC<MyRoomsPageProps> = ({
   events,
+  isRoomHost,
   onOpenEvent,
   onDeleteEvent,
   onCreateRoom,
@@ -216,23 +218,25 @@ export const MyRoomsPage: React.FC<MyRoomsPageProps> = ({
                       </span>
                     )}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Permanently delete "${event.name}" and its guests/chat?`
-                        )
-                      ) {
-                        onDeleteEvent(event.id);
-                      }
-                    }}
-                    className="rounded-xl border border-red-400/35 bg-red-500/10 hover:bg-red-500/20 px-3 py-2.5 text-red-600 dark:text-red-400 transition"
-                    title="Delete Room"
-                    aria-label={`Delete ${event.name}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  {isRoomHost(event) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Permanently delete "${event.name}" and its guests/chat?`
+                          )
+                        ) {
+                          onDeleteEvent(event.id);
+                        }
+                      }}
+                      className="rounded-xl border border-red-400/35 bg-red-500/10 hover:bg-red-500/20 px-3 py-2.5 text-red-600 dark:text-red-400 transition"
+                      title="Delete Room (Host only)"
+                      aria-label={`Delete ${event.name}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </motion.div>

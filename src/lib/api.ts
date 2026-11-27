@@ -283,6 +283,23 @@ export async function addGuestOnApi(
   }
 }
 
+export async function removeGuestOnApi(
+  roomId: string,
+  guestId: string
+): Promise<boolean> {
+  try {
+    await fetchJson(
+      `/api/rooms/${encodeURIComponent(roomId)}/guests/${encodeURIComponent(
+        guestId
+      )}`,
+      { method: 'DELETE' }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function toggleGuestPaymentOnApi(
   roomId: string,
   guestId: string,

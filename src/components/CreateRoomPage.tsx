@@ -22,6 +22,8 @@ import { EASE_SKIPER, SPRING_POP } from './MotionPrimitives';
 
 interface CreateRoomPageProps {
   creatorName: string;
+  creatorEmail?: string;
+  creatorId?: string | null;
   onCreateEvent: (newEvent: MonteEvent) => void;
   onCancel: () => void;
   onShowToast: (msg: string) => void;
@@ -77,6 +79,8 @@ const COVER_PRESETS: Record<EventType, { image: string; gradient: string }> = {
 
 export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
   creatorName,
+  creatorEmail,
+  creatorId,
   onCreateEvent,
   onCancel,
   onShowToast,
@@ -188,6 +192,8 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
       inviteCode,
       unreadCount: 0,
       createdBy: creatorName,
+      hostId: creatorId || undefined,
+      hostEmail: creatorEmail || undefined,
       budgetBreakdown: {
         Transport: Math.round(totalBudget * 0.3),
         Food: Math.round(totalBudget * 0.25),

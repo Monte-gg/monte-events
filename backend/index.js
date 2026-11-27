@@ -473,6 +473,24 @@ app.post('/api/rooms/:id/join', async (req, res) => {
   }
 });
 
+// DELETE /api/rooms/:id/guests/:guestId — host removes a guest from a room
+app.delete('/api/rooms/:id/guests/:guestId', async (req, res) => {
+  if (!requireSupabase(res)) return;
+  try {
+    const { id, guestId } = req.params;
+    const { error } = await supabase
+      .from('guests')
+      .delete()
+      .eq('id', guestId)
+      .eq('room_id', id);
+    if (error) throw error;
+    res.json({ ok: true, deletedGuestId: guestId });
+  } catch (err) {
+    console.error('DELETE /api/rooms/:id/guests/:guestId failed:', err);
+    res.status(500).json({ error: err.message || 'Failed to remove guest' });
+  }
+});
+
 // PATCH /api/rooms/:id/guests/:guestId/payment — toggle paid status & return updated counts
 app.patch('/api/rooms/:id/guests/:guestId/payment', async (req, res) => {
   if (!requireSupabase(res)) return;

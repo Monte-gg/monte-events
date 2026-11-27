@@ -15,6 +15,7 @@ import {
   fetchRoomMessagesFromApi,
   fetchRoomsFromApi,
   joinRoomOnApi,
+  removeGuestOnApi,
   sendRoomMessageOnApi,
   sendWelcomeEmailOnApi,
   toggleGuestPaymentOnApi,
@@ -650,12 +651,37 @@ function MonteAppContent() {
     showToast(`Room "${newEvent.name}" created!`);
   };
 
+  const isUserRoomHost = useCallback(
+    (event: MonteEvent): boolean => {
+      if (isGuestMode) return false;
+      if (event.hostId && supabaseUserId && event.hostId === supabaseUserId) {
+        return true;
+      }
+      if (
+        event.hostEmail &&
+        user.email &&
+        event.hostEmail.toLowerCase() === user.email.toLowerCase()
+      ) {
+        return true;
+      }
+      return (
+        Boolean(user.name) &&
+        event.createdBy.trim().toLowerCase() === user.name.trim().toLowerCase()
+      );
+    },
+    [isGuestMode, supabaseUserId, user.email, user.name]
+  );
+
   const handleDeleteEvent = (eventId: string) => {
     if (isGuestMode) {
       promptGuestToSignUp('Sign in to manage and delete your event rooms.');
       return;
     }
     const target = events.find((e) => e.id === eventId);
+    if (target && !isUserRoomHost(target)) {
+      showToast('Only the room host can delete this room.', 'info');
+      return;
+    }
     setEvents((prev) => prev.filter((e) => e.id !== eventId));
     setMessagesByEvent((prev) => {
       const next = { ...prev };
@@ -685,6 +711,11 @@ function MonteAppContent() {
       promptGuestToSignUp(
         'Sign in to confirm M-Pesa payments and track event budgets.'
       );
+      return;
+    }
+    const targetEvent = events.find((e) => e.id === eventId);
+    if (targetEvent && !isUserRoomHost(targetEvent)) {
+      showToast('Only the room host can confirm guest payments.', 'info');
       return;
     }
     setEvents((prev) =>
@@ -786,6 +817,11 @@ function MonteAppContent() {
       );
       return;
     }
+    const targetEvent = events.find((e) => e.id === eventId);
+    if (targetEvent && !isUserRoomHost(targetEvent)) {
+      showToast('Only the room host can add guests to this room.', 'info');
+      return;
+    }
     setEvents((prev) =>
       prev.map((ev) =>
         ev.id === eventId
@@ -813,6 +849,27 @@ function MonteAppContent() {
         )
       );
     });
+  };
+
+  const handleRemoveGuestFromEvent = (eventId: string, guestId: string) => {
+    if (isGuestMode) {
+      promptGuestToSignUp('Sign in to manage guests in your room.');
+      return;
+    }
+    const targetEvent = events.find((e) => e.id === eventId);
+    if (targetEvent && !isUserRoomHost(targetEvent)) {
+      showToast('Only the room host can remove guests.', 'info');
+      return;
+    }
+    setEvents((prev) =>
+      prev.map((ev) =>
+        ev.id === eventId
+          ? { ...ev, guests: ev.guests.filter((g) => g.id !== guestId) }
+          : ev
+      )
+    );
+    void removeGuestOnApi(eventId, guestId);
+    showToast('Guest removed from room', 'info');
   };
 
   const handleRefreshMembers = useCallback(async () => {
@@ -1101,6 +1158,8 @@ function MonteAppContent() {
           {currentPage === 'create' && (
             <CreateRoomPage
               creatorName={user.name}
+              creatorEmail={user.email}
+              creatorId={supabaseUserId}
               onCreateEvent={handleCreateEvent}
               onCancel={() => setCurrentPage('dashboard')}
               onShowToast={showToast}
@@ -1110,6 +1169,7 @@ function MonteAppContent() {
           {currentPage === 'rooms' && (
             <MyRoomsPage
               events={events}
+              isRoomHost={isUserRoomHost}
               onOpenEvent={handleOpenEvent}
               onDeleteEvent={handleDeleteEvent}
               onCreateRoom={() => setCurrentPage('create')}
@@ -1124,12 +1184,14 @@ function MonteAppContent() {
               messages={messagesByEvent[activeEvent.id] || []}
               media={media.filter((m) => m.eventId === activeEvent.id)}
               user={user}
+              isHost={isUserRoomHost(activeEvent)}
               typingUser={typingByEvent[activeEvent.id] || null}
               onBack={() => setCurrentPage('rooms')}
               onDeleteEvent={handleDeleteEvent}
               onJoinRoom={handleJoinRoom}
               onToggleGuestPaid={handleToggleGuestPaid}
               onAddGuestToEvent={handleAddGuestToEvent}
+              onRemoveGuestFromEvent={handleRemoveGuestFromEvent}
               onUploadMedia={handleUploadMedia}
               onSendMessage={handleSendMessage}
               onToggleReaction={handleToggleReaction}

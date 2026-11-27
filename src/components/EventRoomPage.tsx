@@ -14,8 +14,10 @@ import {
   Plus,
   Search,
   Share2,
+  ShieldCheck,
   Trash2,
   UploadCloud,
+  UserMinus,
   Users,
   Wallet,
   X,
@@ -46,12 +48,14 @@ interface EventRoomPageProps {
   messages: ChatMessage[];
   media: MediaItem[];
   user: UserProfile;
+  isHost: boolean;
   typingUser?: string | null;
   onBack: () => void;
   onDeleteEvent: (eventId: string) => void;
   onJoinRoom?: (eventId: string) => void;
   onToggleGuestPaid: (eventId: string, guestId: string) => void;
   onAddGuestToEvent: (eventId: string, guest: Guest) => void;
+  onRemoveGuestFromEvent: (eventId: string, guestId: string) => void;
   onUploadMedia: (eventId: string, items: MediaItem[]) => void;
   onSendMessage: (
     eventId: string,
@@ -74,12 +78,14 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
   messages,
   media,
   user,
+  isHost,
   typingUser,
   onBack,
   onDeleteEvent,
   onJoinRoom,
   onToggleGuestPaid,
   onAddGuestToEvent,
+  onRemoveGuestFromEvent,
   onUploadMedia,
   onSendMessage,
   onToggleReaction,
@@ -222,14 +228,16 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
           Back to Rooms
         </button>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setDeleteConfirmOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-full border border-red-400/40 bg-red-500/10 hover:bg-red-500/20 px-3.5 py-2 text-xs font-extrabold text-red-600 dark:text-red-400 transition"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Delete Room
-          </button>
+          {isHost && (
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-red-400/40 bg-red-500/10 hover:bg-red-500/20 px-3.5 py-2 text-xs font-extrabold text-red-600 dark:text-red-400 transition"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete Room
+            </button>
+          )}
           <div className="hidden sm:block">
             <ThemeToggle />
           </div>
@@ -308,9 +316,15 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
 
         <div className="relative z-10 p-6 sm:p-8 flex flex-col md:flex-row md:items-end justify-between gap-5">
           <div className="space-y-2.5 max-w-2xl">
-            <span className="inline-flex items-center rounded-full bg-[#1A6BFF] px-3 py-1 text-xs font-extrabold">
-              {event.customType || event.type}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center rounded-full bg-[#1A6BFF] px-3 py-1 text-xs font-extrabold">
+                {event.customType || event.type}
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/15 backdrop-blur-sm px-3 py-1 text-xs font-bold text-white">
+                <ShieldCheck className="h-3.5 w-3.5 text-[#D6E6FF]" />
+                {isHost ? 'You are the Host' : `Host: ${event.createdBy}`}
+              </span>
+            </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
               {event.name}
             </h1>
@@ -435,7 +449,9 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
                   Guest Payment Confirmation
                 </h2>
                 <p className="text-xs text-[#0A1E5C]/65 dark:text-white/65">
-                  Tick &ldquo;Confirm Payment&rdquo; as friends send M-Pesa — they move straight to Paid &amp; &ldquo;In the Event&rdquo;.
+                  {isHost
+                    ? 'As room host, tick “Confirm Payment” as friends send M-Pesa — they move straight to Paid & “In the Event”.'
+                    : `Only the room host (${event.createdBy}) can confirm payments or manage the guest list.`}
                 </p>
               </div>
               <span className="rounded-full bg-[#F0F6FF] dark:bg-[#0B1A3A] px-3.5 py-1.5 text-xs font-extrabold text-[#1A6BFF] dark:text-[#2B7FFF]">
@@ -473,14 +489,16 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
                   {f}
                 </button>
               ))}
-              <button
-                type="button"
-                onClick={() => setShowAddGuestRow((s) => !s)}
-                className="inline-flex items-center gap-1 rounded-full bg-[#0B2E8F] hover:bg-[#1A6BFF] px-4 py-1.5 text-xs font-extrabold text-white transition"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add Guest
-              </button>
+              {isHost && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddGuestRow((s) => !s)}
+                  className="inline-flex items-center gap-1 rounded-full bg-[#0B2E8F] hover:bg-[#1A6BFF] px-4 py-1.5 text-xs font-extrabold text-white transition"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Guest
+                </button>
+              )}
             </div>
           </div>
 
@@ -579,51 +597,70 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
                     </div>
                   </div>
 
-                  {/* Animated Confirm Payment Toggle with SVG Checkmark Draw-In */}
-                  <motion.button
-                    type="button"
-                    role="checkbox"
-                    aria-checked={guest.paid}
-                    whileTap={{ scale: 0.96 }}
-                    onClick={() => handleTogglePaidWithFlash(guest)}
-                    className={`inline-flex items-center gap-2.5 cursor-pointer select-none rounded-xl border px-3.5 py-2 transition-colors self-start sm:self-center ${
-                      guest.paid
-                        ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                        : 'border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/70 dark:bg-[#0B1A3A] text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF]'
-                    }`}
-                  >
-                    <span
-                      className={`flex h-5 w-5 items-center justify-center rounded-md border transition-colors ${
-                        guest.paid
-                          ? 'border-emerald-500 bg-emerald-500 text-white'
-                          : 'border-[#1A6BFF]/40 bg-white dark:bg-[#13224A]'
-                      }`}
-                    >
-                      <svg
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        className="h-3.5 w-3.5"
-                        aria-hidden="true"
-                      >
-                        <motion.path
-                          d="M3.2 8.4 L6.6 11.6 L12.8 4.6"
-                          stroke="currentColor"
-                          strokeWidth="2.4"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          initial={false}
-                          animate={{
-                            pathLength: guest.paid ? 1 : 0,
-                            opacity: guest.paid ? 1 : 0,
-                          }}
-                          transition={{ duration: 0.25, ease: 'easeOut' }}
-                        />
-                      </svg>
-                    </span>
-                    <span className="text-xs font-extrabold">
-                      {guest.paid ? 'Payment Confirmed' : 'Confirm Payment'}
-                    </span>
-                  </motion.button>
+                  {/* Host-only Confirm Payment Toggle & Remove Guest */}
+                  <div className="flex items-center gap-2 self-start sm:self-center">
+                    {isHost ? (
+                      <>
+                        <motion.button
+                          type="button"
+                          role="checkbox"
+                          aria-checked={guest.paid}
+                          whileTap={{ scale: 0.96 }}
+                          onClick={() => handleTogglePaidWithFlash(guest)}
+                          className={`inline-flex items-center gap-2.5 cursor-pointer select-none rounded-xl border px-3.5 py-2 transition-colors ${
+                            guest.paid
+                              ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                              : 'border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/70 dark:bg-[#0B1A3A] text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF]'
+                          }`}
+                        >
+                          <span
+                            className={`flex h-5 w-5 items-center justify-center rounded-md border transition-colors ${
+                              guest.paid
+                                ? 'border-emerald-500 bg-emerald-500 text-white'
+                                : 'border-[#1A6BFF]/40 bg-white dark:bg-[#13224A]'
+                            }`}
+                          >
+                            <svg
+                              viewBox="0 0 16 16"
+                              fill="none"
+                              className="h-3.5 w-3.5"
+                              aria-hidden="true"
+                            >
+                              <motion.path
+                                d="M3.2 8.4 L6.6 11.6 L12.8 4.6"
+                                stroke="currentColor"
+                                strokeWidth="2.4"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                initial={false}
+                                animate={{
+                                  pathLength: guest.paid ? 1 : 0,
+                                  opacity: guest.paid ? 1 : 0,
+                                }}
+                                transition={{ duration: 0.25, ease: 'easeOut' }}
+                              />
+                            </svg>
+                          </span>
+                          <span className="text-xs font-extrabold">
+                            {guest.paid ? 'Payment Confirmed' : 'Confirm Payment'}
+                          </span>
+                        </motion.button>
+                        <button
+                          type="button"
+                          onClick={() => onRemoveGuestFromEvent(event.id, guest.id)}
+                          title={`Remove ${guest.name} from room`}
+                          aria-label={`Remove ${guest.name}`}
+                          className="rounded-xl border border-red-400/35 bg-red-500/10 hover:bg-red-500/20 p-2 text-red-600 dark:text-red-400 transition"
+                        >
+                          <UserMinus className="h-4 w-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-[11px] font-bold text-[#0A1E5C]/55 dark:text-white/55 px-2">
+                        {guest.paid ? 'Confirmed by Host' : 'Awaiting Host'}
+                      </span>
+                    )}
+                  </div>
                 </motion.div>
               );
             })}
@@ -794,6 +831,7 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
           messages={messages}
           media={media}
           user={user}
+          isHost={isHost}
           typingUser={typingUser}
           onSendMessage={onSendMessage}
           onToggleReaction={onToggleReaction}

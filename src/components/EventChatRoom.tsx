@@ -27,6 +27,7 @@ interface EventChatRoomProps {
   messages: ChatMessage[];
   media: MediaItem[];
   user: UserProfile;
+  isHost?: boolean;
   typingUser?: string | null;
   onSendMessage: (
     eventId: string,
@@ -50,6 +51,7 @@ export const EventChatRoom: React.FC<EventChatRoomProps> = ({
   messages,
   media,
   user,
+  isHost = false,
   typingUser,
   onSendMessage,
   onToggleReaction,
@@ -256,15 +258,17 @@ export const EventChatRoom: React.FC<EventChatRoomProps> = ({
               </span>
             )}
           </button>
-          <button
-            type="button"
-            onClick={() => setShowAddFriend(true)}
-            className="inline-flex items-center gap-1 rounded-xl bg-[#F0F6FF] dark:bg-[#13224A] border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-2.5 py-1.5 text-xs font-bold text-[#1A6BFF] dark:text-[#2B7FFF] hover:bg-[#D6E6FF]/60 transition"
-            title="Add friend to event"
-          >
-            <UserPlus className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Add</span>
-          </button>
+          {isHost && (
+            <button
+              type="button"
+              onClick={() => setShowAddFriend(true)}
+              className="inline-flex items-center gap-1 rounded-xl bg-[#F0F6FF] dark:bg-[#13224A] border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-2.5 py-1.5 text-xs font-bold text-[#1A6BFF] dark:text-[#2B7FFF] hover:bg-[#D6E6FF]/60 transition"
+              title="Add member to event"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Add</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setShowMembers(true)}
@@ -509,18 +513,20 @@ export const EventChatRoom: React.FC<EventChatRoomProps> = ({
                   >
                     <Reply className="h-3 w-3" />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => onTogglePin(event.id, msg.id)}
-                    className={`rounded-full border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-1 ${
-                      msg.pinned
-                        ? 'text-[#1A6BFF] dark:text-[#2B7FFF]'
-                        : 'text-[#0A1E5C]/70 dark:text-white/70 hover:text-[#1A6BFF]'
-                    }`}
-                    title={msg.pinned ? 'Unpin' : 'Pin message'}
-                  >
-                    <Pin className="h-3 w-3" />
-                  </button>
+                  {isHost && (
+                    <button
+                      type="button"
+                      onClick={() => onTogglePin(event.id, msg.id)}
+                      className={`rounded-full border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-1 ${
+                        msg.pinned
+                          ? 'text-[#1A6BFF] dark:text-[#2B7FFF]'
+                          : 'text-[#0A1E5C]/70 dark:text-white/70 hover:text-[#1A6BFF]'
+                      }`}
+                      title={msg.pinned ? 'Unpin' : 'Pin message (Host only)'}
+                    >
+                      <Pin className="h-3 w-3" />
+                    </button>
+                  )}
                 </div>
 
                 {/* Existing Reactions */}

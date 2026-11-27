@@ -103,6 +103,8 @@ export interface MonteEvent {
   budgetBreakdown: BudgetBreakdown;
   unreadCount: number;
   createdBy: string;
+  hostId?: string;
+  hostEmail?: string;
 }
 
 export interface UserProfile {
