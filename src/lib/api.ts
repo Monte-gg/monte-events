@@ -6,6 +6,7 @@ import {
   Guest,
   MediaItem,
   MonteEvent,
+  PlatformMember,
 } from '../types';
 
 export const API_BASE_URL = (
@@ -184,6 +185,15 @@ export async function checkApiHealth(): Promise<boolean> {
     return Boolean(res.ok);
   } catch {
     return false;
+  }
+}
+
+export async function fetchMembersFromApi(): Promise<PlatformMember[] | null> {
+  try {
+    const data = await fetchJson<{ members: PlatformMember[] }>('/api/members');
+    return data.members || [];
+  } catch {
+    return null;
   }
 }
 

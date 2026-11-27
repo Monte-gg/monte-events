@@ -129,12 +129,26 @@ export interface NotificationItem {
   eventId?: string;
 }
 
+export interface PlatformMember {
+  id: string;
+  name: string;
+  username: string;
+  email?: string;
+  bio: string;
+  location: string;
+  memberSince: string;
+  avatarUrl: string;
+  initials: string;
+  preferredTypes: EventType[];
+}
+
 export type AppPage =
   | 'dashboard'
   | 'create'
   | 'rooms'
   | 'event-room'
   | 'chats'
+  | 'members'
   | 'media'
   | 'profile';
 

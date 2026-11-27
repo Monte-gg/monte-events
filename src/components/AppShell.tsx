@@ -8,6 +8,7 @@ import {
   MessageCircle,
   PlusCircle,
   User,
+  Users,
 } from 'lucide-react';
 import { AppPage, UserProfile } from '../types';
 import { motion } from 'motion/react';
@@ -44,6 +45,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     { id: 'create', label: 'Create', icon: PlusCircle },
     { id: 'rooms', label: 'My Rooms', icon: CalendarRange },
     { id: 'chats', label: 'Chats', icon: MessageCircle, badge: totalUnreadChats },
+    { id: 'members', label: 'Members', icon: Users },
     { id: 'media', label: 'Media', icon: Images },
     { id: 'profile', label: 'Profile', icon: User },
   ];
@@ -256,7 +258,7 @@ export const AppShell: React.FC<AppShellProps> = ({
 
       {/* Mobile Bottom Navigation */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white/95 dark:bg-[#0B1A3A]/95 backdrop-blur-lg px-2 py-1.5 transition-colors duration-300">
-        <div className="grid grid-cols-6 gap-0.5 max-w-lg mx-auto">
+        <div className="grid grid-cols-7 gap-0.5 max-w-lg mx-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = isNavActive(item.id);

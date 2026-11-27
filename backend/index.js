@@ -73,6 +73,79 @@ app.get('/health', (_req, res) => {
   });
 });
 
+// GET /api/members — list registered Monte Events platform members
+app.get('/api/members', async (_req, res) => {
+  if (!requireSupabase(res)) return;
+  try {
+    const [{ data: usersData, error: usersErr }, profilesRes] =
+      await Promise.all([
+        supabase.auth.admin.listUsers({ page: 1, perPage: 100 }),
+        supabase
+          .from('profiles')
+          .select(
+            'id, name, username, bio, location, member_since, avatar_url, initials, preferred_types, email'
+          )
+          .then((r) => r)
+          .catch(() => ({ data: null, error: null })),
+      ]);
+
+    if (usersErr) throw usersErr;
+
+    const profileById = new Map();
+    for (const p of profilesRes?.data || []) {
+      profileById.set(p.id, p);
+    }
+
+    const members = (usersData?.users || []).map((u) => {
+      const p = profileById.get(u.id);
+      const meta = u.user_metadata || {};
+      const name =
+        p?.name ||
+        meta.full_name ||
+        meta.name ||
+        (u.email ? u.email.split('@')[0] : 'Monte Member');
+      const username =
+        p?.username ||
+        String(name)
+          .toLowerCase()
+          .replace(/[^a-z0-9_]/g, '') ||
+        'member';
+      const parts = String(name).trim().split(/\s+/);
+      const initials =
+        p?.initials ||
+        ((parts[0]?.[0] || 'M') + (parts[1]?.[0] || parts[0]?.[1] || 'E')).toUpperCase();
+      const createdDate = u.created_at ? new Date(u.created_at) : new Date();
+      const memberSince =
+        p?.member_since ||
+        createdDate.toLocaleDateString('en-US', {
+          month: 'short',
+          year: 'numeric',
+        });
+
+      return {
+        id: u.id,
+        name,
+        username,
+        email: u.email || p?.email || '',
+        bio: p?.bio || 'Monte Events community member',
+        location: p?.location || 'Nairobi, KE',
+        memberSince,
+        avatarUrl: p?.avatar_url || meta.avatar_url || meta.picture || '',
+        initials,
+        preferredTypes:
+          Array.isArray(p?.preferred_types) && p.preferred_types.length > 0
+            ? p.preferred_types
+            : ['Roadtrip', 'Birthday'],
+      };
+    });
+
+    res.json({ members });
+  } catch (err) {
+    console.error('GET /api/members failed:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch members' });
+  }
+});
+
 // GET /api/rooms — list all event rooms with their guests
 app.get('/api/rooms', async (_req, res) => {
   if (!requireSupabase(res)) return;

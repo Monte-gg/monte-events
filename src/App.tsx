@@ -11,6 +11,7 @@ import {
   deleteAccountOnApi,
   deleteRoomOnApi,
   fetchMediaFromApi,
+  fetchMembersFromApi,
   fetchRoomMessagesFromApi,
   fetchRoomsFromApi,
   joinRoomOnApi,
@@ -42,6 +43,7 @@ import {
 import {
   GUEST_PREVIEW_EVENTS,
   GUEST_PREVIEW_MEDIA,
+  GUEST_PREVIEW_MEMBERS,
   GUEST_PREVIEW_MESSAGES,
   GUEST_USER_PROFILE,
 } from './data/guestPreviewData';
@@ -53,6 +55,7 @@ import {
   MediaItem,
   MonteEvent,
   NotificationItem,
+  PlatformMember,
   UserProfile,
 } from './types';
 import { AuthPage } from './components/AuthPage';
@@ -64,6 +67,7 @@ import { CreateRoomPage } from './components/CreateRoomPage';
 import { EventRoomPage } from './components/EventRoomPage';
 import { GlobalChatsPage } from './components/GlobalChatsPage';
 import { MyRoomsPage } from './components/MyRoomsPage';
+import { MembersPage } from './components/MembersPage';
 import { MediaVaultPage } from './components/MediaVaultPage';
 import { ProfilePage } from './components/ProfilePage';
 import { MediaLightbox } from './components/MediaLightbox';
@@ -118,6 +122,8 @@ function MonteAppContent() {
   const [currentPage, setCurrentPage] = useState<AppPage>('dashboard');
   const [user, setUser] = useState<UserProfile>(INITIAL_USER_PROFILE);
   const [events, setEvents] = useState<MonteEvent[]>(INITIAL_EVENTS);
+  const [members, setMembers] = useState<PlatformMember[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
   const [media, setMedia] = useState<MediaItem[]>(INITIAL_MEDIA);
   const [messagesByEvent, setMessagesByEvent] =
     useState<Record<string, ChatMessage[]>>(INITIAL_MESSAGES);
@@ -262,11 +268,15 @@ function MonteAppContent() {
       }
       setApiStatus('online');
 
-      const [apiRooms, apiMedia] = await Promise.all([
+      const [apiRooms, apiMedia, apiMembers] = await Promise.all([
         fetchRoomsFromApi(),
         fetchMediaFromApi(),
+        fetchMembersFromApi(),
       ]);
       if (!mounted) return;
+      if (apiMembers) {
+        setMembers(apiMembers);
+      }
 
       if (apiRooms && apiRooms.length > 0) {
         setEvents(apiRooms);
@@ -413,6 +423,7 @@ function MonteAppContent() {
     setIsAuthenticated(true);
     setUser(GUEST_USER_PROFILE);
     setEvents(GUEST_PREVIEW_EVENTS);
+    setMembers(GUEST_PREVIEW_MEMBERS);
     setMedia(GUEST_PREVIEW_MEDIA);
     setMessagesByEvent(GUEST_PREVIEW_MESSAGES);
     setActiveEventId(GUEST_PREVIEW_EVENTS[0].id);
@@ -454,19 +465,24 @@ function MonteAppContent() {
       setMessagesByEvent({});
       setActiveEventId('');
       setActiveChatEventId(null);
-      // Reload real rooms & media from backend/Supabase
-      void Promise.all([fetchRoomsFromApi(), fetchMediaFromApi()]).then(
-        ([apiRooms, apiMedia]) => {
-          if (apiRooms && apiRooms.length > 0) {
-            setEvents(apiRooms);
-            setActiveEventId(apiRooms[0].id);
-            setActiveChatEventId(apiRooms[0].id);
-          }
-          if (apiMedia && apiMedia.length > 0) {
-            setMedia(apiMedia);
-          }
+      // Reload real rooms, media & members from backend/Supabase
+      void Promise.all([
+        fetchRoomsFromApi(),
+        fetchMediaFromApi(),
+        fetchMembersFromApi(),
+      ]).then(([apiRooms, apiMedia, apiMembers]) => {
+        if (apiRooms && apiRooms.length > 0) {
+          setEvents(apiRooms);
+          setActiveEventId(apiRooms[0].id);
+          setActiveChatEventId(apiRooms[0].id);
         }
-      );
+        if (apiMedia && apiMedia.length > 0) {
+          setMedia(apiMedia);
+        }
+        if (apiMembers) {
+          setMembers(apiMembers);
+        }
+      });
     }
     void fetchProfileFromSupabase(payload.userId).then((dbProfile) => {
       if (dbProfile) {
@@ -759,6 +775,45 @@ function MonteAppContent() {
     });
   };
 
+  const handleRefreshMembers = useCallback(async () => {
+    if (isGuestMode) {
+      setMembers(GUEST_PREVIEW_MEMBERS);
+      return;
+    }
+    setMembersLoading(true);
+    const list = await fetchMembersFromApi();
+    if (list) {
+      setMembers(list);
+    }
+    setMembersLoading(false);
+  }, [isGuestMode]);
+
+  const handleInviteMemberToRoom = (roomId: string, member: PlatformMember) => {
+    if (isGuestMode) {
+      promptGuestToSignUp(
+        'Create a free account to invite platform members to your event rooms.'
+      );
+      return;
+    }
+    const targetRoom = events.find((e) => e.id === roomId);
+    const guest: Guest = {
+      id: `g-mem-${Date.now()}`,
+      name: member.name,
+      phone: '',
+      email: member.email || '',
+      initials: member.initials,
+      avatarColor: '#1A6BFF',
+      amount: targetRoom?.costPerPerson || 0,
+      paid: false,
+      online: false,
+    };
+    handleAddGuestToEvent(roomId, guest);
+    showToast(
+      `Invited ${member.name} to ${targetRoom?.name || 'the room'}!`,
+      'success'
+    );
+  };
+
   const handleUploadMedia = (_eventId: string, items: MediaItem[]) => {
     if (isGuestMode) {
       promptGuestToSignUp(
@@ -1002,6 +1057,18 @@ function MonteAppContent() {
               onAddGuestToEvent={handleAddGuestToEvent}
               onSelectMedia={handleSelectMedia}
               onShowToast={showToast}
+            />
+          )}
+
+          {currentPage === 'members' && (
+            <MembersPage
+              members={members}
+              events={events}
+              currentUserEmail={user.email}
+              loading={membersLoading}
+              onRefresh={handleRefreshMembers}
+              onInviteMemberToRoom={handleInviteMemberToRoom}
+              onCreateRoom={() => setCurrentPage('create')}
             />
           )}
 
