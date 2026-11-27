@@ -1150,25 +1150,39 @@ app.delete('/api/account', handleDeleteAccount);
 // Paystack Kenya M-PESA STK Push + Host Auto-Transfer Payout Endpoints
 // ============================================================================
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const pendingPaymentsMemory = new Map();
+
 async function finalizeSuccessfulMpesaPayment(paymentRow) {
   if (!paymentRow || !supabase) return paymentRow;
 
-  // Atomic idempotent transition pending -> success so webhook & polling never double-process
-  const { data: updatedPayment, error: claimErr } = await supabase
-    .from('payments')
-    .update({ status: 'success' })
-    .eq('id', paymentRow.id)
-    .neq('status', 'success')
-    .select()
-    .maybeSingle();
+  let updatedPayment = paymentRow;
 
-  if (claimErr) {
-    console.error('[paystack] Failed to claim payment row:', claimErr.message);
-    return paymentRow;
-  }
-  if (!updatedPayment) {
-    // Already processed by an earlier webhook or poll
-    return { ...paymentRow, status: 'success' };
+  if (paymentRow._memoryOnly) {
+    if (paymentRow.status === 'success') return paymentRow;
+    paymentRow.status = 'success';
+    pendingPaymentsMemory.set(paymentRow.paystack_reference, paymentRow);
+    updatedPayment = paymentRow;
+  } else {
+    // Atomic idempotent transition pending -> success so webhook & polling never double-process
+    const { data: claimed, error: claimErr } = await supabase
+      .from('payments')
+      .update({ status: 'success' })
+      .eq('id', paymentRow.id)
+      .neq('status', 'success')
+      .select()
+      .maybeSingle();
+
+    if (claimErr) {
+      console.error('[paystack] Failed to claim payment row:', claimErr.message);
+      return paymentRow;
+    }
+    if (!claimed) {
+      // Already processed by an earlier webhook or poll
+      return { ...paymentRow, status: 'success' };
+    }
+    updatedPayment = claimed;
   }
 
   // 1. Fetch room details
@@ -1357,23 +1371,45 @@ app.post('/api/payments/mpesa/charge', async (req, res) => {
 
     const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
     const reference = `MONTE-${Date.now()}-${randomPart}`;
+    const validRoomUuid = UUID_RE.test(String(roomId));
+    const validGuestUuid = guestId && UUID_RE.test(String(guestId));
 
-    // Insert pending payment record
-    const { error: insertErr } = await supabase.from('payments').insert({
-      room_id: roomId,
-      guest_id: guestId || null,
-      payer_email: String(email).trim(),
-      payer_phone: normalizedPhone,
-      amount_kes: numericAmount,
-      paystack_reference: reference,
-      status: 'pending',
-      payout_status: 'pending_payout',
-    });
-    if (insertErr) {
-      console.error('[paystack] Failed to insert pending payment:', insertErr.message);
-      return res.status(500).json({
-        ok: false,
-        error: 'Could not initialize payment record. Ensure payments table is migrated in Supabase.',
+    // Try inserting pending payment record in Supabase; gracefully fall back to in-memory
+    // if payments table isn't migrated yet or roomId is a legacy non-UUID id so STK push never blocks.
+    let savedInDb = false;
+    if (validRoomUuid) {
+      const { error: insertErr } = await supabase.from('payments').insert({
+        room_id: roomId,
+        guest_id: validGuestUuid ? guestId : null,
+        payer_email: String(email).trim(),
+        payer_phone: normalizedPhone,
+        amount_kes: numericAmount,
+        paystack_reference: reference,
+        status: 'pending',
+        payout_status: 'pending_payout',
+      });
+      if (insertErr) {
+        console.warn(
+          '[paystack] payments table insert skipped (falling back to memory):',
+          insertErr.message
+        );
+      } else {
+        savedInDb = true;
+      }
+    }
+
+    if (!savedInDb) {
+      pendingPaymentsMemory.set(reference, {
+        id: reference,
+        room_id: roomId,
+        guest_id: validGuestUuid ? guestId : null,
+        payer_email: String(email).trim(),
+        payer_phone: normalizedPhone,
+        amount_kes: numericAmount,
+        paystack_reference: reference,
+        status: 'pending',
+        payout_status: 'pending_payout',
+        _memoryOnly: true,
       });
     }
 
@@ -1418,13 +1454,20 @@ app.get('/api/payments/mpesa/status/:reference', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Payment reference is required.' });
     }
 
-    const { data: payment, error: findErr } = await supabase
-      .from('payments')
-      .select('*')
-      .eq('paystack_reference', reference)
-      .maybeSingle();
-
-    if (findErr) throw findErr;
+    let payment = null;
+    try {
+      const { data, error: findErr } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('paystack_reference', reference)
+        .maybeSingle();
+      if (!findErr && data) payment = data;
+    } catch {
+      // Fall back to in-memory map
+    }
+    if (!payment) {
+      payment = pendingPaymentsMemory.get(reference) || null;
+    }
     if (!payment) {
       return res.status(404).json({ ok: false, error: 'Payment not found.' });
     }
@@ -1453,10 +1496,15 @@ app.get('/api/payments/mpesa/status/:reference', async (req, res) => {
           });
         }
         if (gatewayStatus === 'failed' || gatewayStatus === 'abandoned') {
-          await supabase
-            .from('payments')
-            .update({ status: 'failed' })
-            .eq('id', payment.id);
+          if (payment._memoryOnly) {
+            payment.status = 'failed';
+            pendingPaymentsMemory.set(reference, payment);
+          } else {
+            await supabase
+              .from('payments')
+              .update({ status: 'failed' })
+              .eq('id', payment.id);
+          }
           return res.json({
             ok: true,
             reference,
