@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Bell,
   Cake,
@@ -671,199 +672,212 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
         </div>
       )}
 
-      {/* EDIT PROFILE MODAL */}
-      {editOpen && (
-        <div
-          className="fixed inset-0 z-[85] flex items-center justify-center bg-[#0A1430]/75 backdrop-blur-sm p-4"
-          onClick={() => setEditOpen(false)}
-        >
+      {/* EDIT PROFILE MODAL — Portaled & compact 2-column fit for phones */}
+      {editOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
           <div
-            className="animate-slide-up w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0A1430]/75 backdrop-blur-sm p-2.5 sm:p-4"
+            onClick={() => setEditOpen(false)}
           >
-            {/* Modal Header with ThemeToggle */}
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#13224A] px-5 py-4">
-              <div className="flex items-center gap-2.5">
-                <img src="./favicon.svg" alt="Monte" className="h-7 w-7" />
-                <h2 className="text-base sm:text-lg font-extrabold text-[#0A1E5C] dark:text-white">
-                  Edit Profile
-                </h2>
+            <div
+              className="animate-slide-up w-full max-w-lg max-h-[92dvh] flex flex-col overflow-hidden rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="shrink-0 flex items-center justify-between border-b border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#13224A] px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <img src="./favicon.svg" alt="Monte" className="h-6 w-6" />
+                  <h2 className="text-sm sm:text-base font-extrabold text-[#0A1E5C] dark:text-white">
+                    Edit Profile
+                  </h2>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <ThemeToggle compact />
+                  <button
+                    type="button"
+                    onClick={() => setEditOpen(false)}
+                    className="rounded-full p-1.5 text-[#0A1E5C]/60 dark:text-white/60 hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
+                    aria-label="Close edit profile"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <ThemeToggle compact />
-                <button
-                  type="button"
-                  onClick={() => setEditOpen(false)}
-                  className="rounded-full p-1.5 text-[#0A1E5C]/60 dark:text-white/60 hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+
+              <form onSubmit={handleSaveEdit} className="flex-1 flex flex-col min-h-0">
+                <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+                  {/* Compact Photo Picker Row */}
+                  <div className="flex items-center gap-3">
+                    <div className="h-14 w-14 shrink-0 rounded-2xl overflow-hidden ring-2 ring-[#1A6BFF] bg-[#1A6BFF] text-white flex items-center justify-center font-extrabold text-sm">
+                      {draft.avatarUrl ? (
+                        <img
+                          src={draft.avatarUrl}
+                          alt={draft.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span>{draft.initials}</span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <input
+                        ref={avatarInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleAvatarFile}
+                        className="hidden"
+                      />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => avatarInputRef.current?.click()}
+                          className="rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-3 py-1 text-xs font-bold text-white"
+                        >
+                          Upload Photo
+                        </button>
+                        <div className="flex items-center gap-1.5">
+                          {AVATAR_PRESETS.map((url) => (
+                            <button
+                              key={url}
+                              type="button"
+                              onClick={() => setDraft((p) => ({ ...p, avatarUrl: url }))}
+                              className={`h-7 w-7 rounded-full overflow-hidden ring-2 transition ${
+                                draft.avatarUrl === url
+                                  ? 'ring-[#1A6BFF] scale-105'
+                                  : 'ring-transparent opacity-75 hover:opacity-100'
+                              }`}
+                            >
+                              <img src={url} alt="Preset" className="h-full w-full object-cover" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Compact 2-column grid that fits cleanly on phones */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-0.5">
+                        Full Name
+                      </label>
+                      <input
+                        type="text"
+                        value={draft.name}
+                        onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                        required
+                        className="w-full min-w-0 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3 py-2 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-0.5">
+                        Username
+                      </label>
+                      <input
+                        type="text"
+                        value={draft.username}
+                        onChange={(e) => setDraft({ ...draft, username: e.target.value })}
+                        required
+                        className="w-full min-w-0 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3 py-2 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="col-span-2">
+                      <label className="block text-[11px] font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-0.5">
+                        Bio
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={draft.bio}
+                        onChange={(e) => setDraft({ ...draft, bio: e.target.value })}
+                        className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3 py-1.5 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none resize-none"
+                      />
+                    </div>
+
+                    <div className="col-span-2">
+                      <label className="block text-[11px] font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-0.5">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={draft.email}
+                        onChange={(e) => setDraft({ ...draft, email: e.target.value })}
+                        className="w-full min-w-0 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3 py-2 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-0.5">
+                        Phone
+                      </label>
+                      <input
+                        type="tel"
+                        inputMode="tel"
+                        value={draft.phone}
+                        onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+                        className="w-full min-w-0 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3 py-2 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-0.5">
+                        M-Pesa Number
+                      </label>
+                      <input
+                        type="tel"
+                        inputMode="tel"
+                        value={draft.mpesaNumber}
+                        onChange={(e) => setDraft({ ...draft, mpesaNumber: e.target.value })}
+                        className="w-full min-w-0 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3 py-2 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-0.5">
+                        Location
+                      </label>
+                      <input
+                        type="text"
+                        value={draft.location}
+                        onChange={(e) => setDraft({ ...draft, location: e.target.value })}
+                        className="w-full min-w-0 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3 py-2 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-0.5">
+                        Birthday
+                      </label>
+                      <input
+                        type="date"
+                        value={draft.birthday}
+                        onChange={(e) => setDraft({ ...draft, birthday: e.target.value })}
+                        className="w-full min-w-0 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-2.5 py-2 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sticky Footer — Save & Cancel ALWAYS visible without scrolling */}
+                <div className="shrink-0 flex items-center justify-end gap-2.5 px-4 py-3 border-t border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#13224A]">
+                  <button
+                    type="button"
+                    onClick={() => setEditOpen(false)}
+                    className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-4 py-2 text-xs sm:text-sm font-bold text-[#0A1E5C] dark:text-white hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-5 py-2 text-xs sm:text-sm font-extrabold text-white shadow-monte"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
             </div>
-
-            <form onSubmit={handleSaveEdit} className="p-5 space-y-4">
-              {/* Photo Picker */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <img
-                  src={draft.avatarUrl}
-                  alt={draft.name}
-                  className="h-20 w-20 rounded-2xl object-cover ring-2 ring-[#1A6BFF]"
-                />
-                <div className="space-y-2 flex-1">
-                  <input
-                    ref={avatarInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleAvatarFile}
-                    className="hidden"
-                  />
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => avatarInputRef.current?.click()}
-                      className="rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-3.5 py-1.5 text-xs font-bold text-white"
-                    >
-                      Upload Photo
-                    </button>
-                    <span className="text-[11px] font-semibold text-[#0A1E5C]/60 dark:text-white/60">
-                      or pick preset:
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {AVATAR_PRESETS.map((url) => (
-                      <button
-                        key={url}
-                        type="button"
-                        onClick={() => setDraft((p) => ({ ...p, avatarUrl: url }))}
-                        className={`h-9 w-9 rounded-full overflow-hidden ring-2 transition ${
-                          draft.avatarUrl === url
-                            ? 'ring-[#1A6BFF] scale-110'
-                            : 'ring-transparent opacity-75 hover:opacity-100'
-                        }`}
-                      >
-                        <img src={url} alt="Preset" className="h-full w-full object-cover" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-xs font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-1">
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    value={draft.name}
-                    onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                    required
-                    className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3.5 py-2.5 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-1">
-                    Username
-                  </label>
-                  <input
-                    type="text"
-                    value={draft.username}
-                    onChange={(e) => setDraft({ ...draft, username: e.target.value })}
-                    required
-                    className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3.5 py-2.5 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-1">
-                    Bio
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={draft.bio}
-                    onChange={(e) => setDraft({ ...draft, bio: e.target.value })}
-                    className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3.5 py-2.5 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none resize-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={draft.email}
-                    onChange={(e) => setDraft({ ...draft, email: e.target.value })}
-                    className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3.5 py-2.5 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-1">
-                    Phone
-                  </label>
-                  <input
-                    type="tel"
-                    value={draft.phone}
-                    onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
-                    className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3.5 py-2.5 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-1">
-                    Location
-                  </label>
-                  <input
-                    type="text"
-                    value={draft.location}
-                    onChange={(e) => setDraft({ ...draft, location: e.target.value })}
-                    className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3.5 py-2.5 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-1">
-                    Birthday
-                  </label>
-                  <input
-                    type="date"
-                    value={draft.birthday}
-                    onChange={(e) => setDraft({ ...draft, birthday: e.target.value })}
-                    className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3.5 py-2.5 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-1">
-                    M-Pesa Number
-                  </label>
-                  <input
-                    type="text"
-                    value={draft.mpesaNumber}
-                    onChange={(e) => setDraft({ ...draft, mpesaNumber: e.target.value })}
-                    className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3.5 py-2.5 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#D6E6FF] dark:border-[#2B7FFF]/20">
-                <button
-                  type="button"
-                  onClick={() => setEditOpen(false)}
-                  className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-5 py-2.5 text-xs sm:text-sm font-bold text-[#0A1E5C] dark:text-white hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-6 py-2.5 text-xs sm:text-sm font-extrabold text-white shadow-monte"
-                >
-                  Save Changes
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 };

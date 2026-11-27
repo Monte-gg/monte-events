@@ -164,8 +164,10 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
   const [subLocation, setSubLocation] = useState('');
 
   // Step 3: Custom Budget, Custom Expenses, Unlimited Guests, Manual Guests, M-PESA
-  const [totalBudget, setTotalBudget] = useState<number>(60000);
-  const [maxGuests, setMaxGuests] = useState<number>(10);
+  const [totalBudgetStr, setTotalBudgetStr] = useState<string>('60000');
+  const [maxGuestsStr, setMaxGuestsStr] = useState<string>('10');
+  const totalBudget = Number(totalBudgetStr) || 0;
+  const maxGuests = Math.max(1, Number(maxGuestsStr) || 1);
   const [customExpenses, setCustomExpenses] = useState<
     { id: string; title: string; category: ExpenseCategory; amount: number }[]
   >([]);
@@ -310,7 +312,7 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
     ];
     setCustomExpenses(nextList);
     const nextSum = nextList.reduce((s, x) => s + x.amount, 0);
-    setTotalBudget(nextSum);
+    setTotalBudgetStr(String(nextSum));
     setExpTitle('');
     setExpAmount('');
   };
@@ -319,7 +321,7 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
     const nextList = customExpenses.filter((x) => x.id !== id);
     setCustomExpenses(nextList);
     if (nextList.length > 0) {
-      setTotalBudget(nextList.reduce((s, x) => s + x.amount, 0));
+      setTotalBudgetStr(String(nextList.reduce((s, x) => s + x.amount, 0)));
     }
   };
 
@@ -739,7 +741,7 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
                     </span>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-2 w-full">
                     <input
                       type="text"
                       value={activityInput}
@@ -750,13 +752,13 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
                           handleAddActivity();
                         }
                       }}
-                      placeholder="Add an activity (e.g. Boat Ride, Campfire, Live Band)"
-                      className="flex-1 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3.5 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                      placeholder="Add activity (e.g. Boat Ride)"
+                      className="flex-1 min-w-0 w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
                     />
                     <button
                       type="button"
                       onClick={() => handleAddActivity()}
-                      className="rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-4 py-2 text-xs font-extrabold text-white transition"
+                      className="shrink-0 whitespace-nowrap rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-3.5 py-2.5 text-xs font-extrabold text-white transition"
                     >
                       + Add
                     </button>
@@ -1065,33 +1067,36 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
                     <div className="relative">
                       <Wallet className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#1A6BFF] dark:text-[#2B7FFF]" />
                       <input
-                        type="number"
-                        min={0}
-                        step={500}
-                        value={totalBudget}
-                        onChange={(e) => setTotalBudget(Math.max(0, Number(e.target.value)))}
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={totalBudgetStr}
+                        onChange={(e) =>
+                          setTotalBudgetStr(e.target.value.replace(/[^0-9]/g, ''))
+                        }
+                        placeholder="e.g. 60000"
                         className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] pl-10 pr-4 py-3 text-sm font-bold text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
                       <label className="text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70">
-                        Number of Guests (Any Capacity — up to 1,000,000+)
+                        Number of Guests (Any Capacity)
                       </label>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[#F0F6FF] dark:bg-[#0B1A3A] px-3 py-0.5 text-xs font-extrabold text-[#1A6BFF] dark:text-[#2B7FFF]">
+                      <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-[#F0F6FF] dark:bg-[#0B1A3A] px-2.5 py-0.5 text-xs font-extrabold text-[#1A6BFF] dark:text-[#2B7FFF]">
                         <Users className="h-3.5 w-3.5" />
-                        {maxGuests.toLocaleString()} guests
+                        {maxGuests.toLocaleString()}
                       </span>
                     </div>
                     <input
-                      type="number"
-                      min={1}
-                      max={10000000}
-                      value={maxGuests}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={maxGuestsStr}
                       onChange={(e) =>
-                        setMaxGuests(Math.max(1, Number(e.target.value) || 1))
+                        setMaxGuestsStr(e.target.value.replace(/[^0-9]/g, ''))
                       }
                       placeholder="Enter any number (e.g. 20, 500, 1000000)"
                       className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-4 py-3 text-sm font-bold text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
@@ -1101,7 +1106,7 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
                         <button
                           key={n}
                           type="button"
-                          onClick={() => setMaxGuests(n)}
+                          onClick={() => setMaxGuestsStr(String(n))}
                           className={`rounded-full px-2.5 py-1 text-[11px] font-bold border transition ${
                             maxGuests === n
                               ? 'border-[#1A6BFF] bg-[#1A6BFF] text-white'
@@ -1165,10 +1170,13 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
                     <option value="Other">Other</option>
                   </select>
                   <input
-                    type="number"
-                    min={1}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={expAmount}
-                    onChange={(e) => setExpAmount(e.target.value)}
+                    onChange={(e) =>
+                      setExpAmount(e.target.value.replace(/[^0-9]/g, ''))
+                    }
                     placeholder="Amount (KES)"
                     className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
                   />

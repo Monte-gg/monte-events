@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowLeft,
   CheckCircle2,
   Clock,
   Film,
@@ -179,39 +180,38 @@ export const EventChatRoom: React.FC<EventChatRoomProps> = ({
     <div
       className={`relative flex flex-col min-h-0 rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] overflow-hidden shadow-sm ${className}`}
     >
-      {/* Chat Header */}
-      <div className="flex items-center justify-between gap-2 border-b border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#0B1A3A] px-4 py-3">
-        <div className="flex items-center gap-3 min-w-0">
+      {/* Chat Header — compact & non-overlapping on narrow phones */}
+      <div className="shrink-0 flex items-center justify-between gap-2 border-b border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#0B1A3A] px-2.5 sm:px-4 py-2.5 sm:py-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
           {onBack && (
             <button
               type="button"
               onClick={onBack}
-              className="md:hidden rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-2.5 py-1.5 text-xs font-bold text-[#0A1E5C] dark:text-white"
+              aria-label="Back to chats"
+              className="md:hidden flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/70 dark:bg-[#13224A] text-[#0A1E5C] dark:text-white"
             >
-              ← Back
+              <ArrowLeft className="h-4 w-4" />
             </button>
           )}
-          <div className="relative h-10 w-10 shrink-0 rounded-2xl bg-gradient-to-br from-[#0B2E8F] to-[#2B7FFF] flex items-center justify-center text-white font-extrabold text-sm shadow">
+          <div className="relative h-8 w-8 sm:h-10 sm:w-10 shrink-0 rounded-xl sm:rounded-2xl bg-gradient-to-br from-[#0B2E8F] to-[#2B7FFF] flex items-center justify-center text-white font-extrabold text-xs sm:text-sm shadow">
             {event.name.slice(0, 2).toUpperCase()}
-            <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-[#0B1A3A]" />
+            <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-[#0B1A3A]" />
           </div>
-          <div className="min-w-0">
-            <h3 className="truncate text-sm sm:text-base font-extrabold text-[#0A1E5C] dark:text-white">
+          <div className="min-w-0 flex-1">
+            <h3 className="truncate text-sm sm:text-base font-extrabold text-[#0A1E5C] dark:text-white leading-tight">
               {event.name}
             </h3>
-            <div className="flex items-center gap-2 text-[11px] font-semibold text-[#0A1E5C]/65 dark:text-white/65">
-              <span>{event.guests.length + 1} members</span>
-              <span>•</span>
-              <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            <p className="truncate text-[11px] font-semibold text-[#0A1E5C]/65 dark:text-white/65">
+              {event.guests.length + 1} members ·{' '}
+              <span className="text-emerald-600 dark:text-emerald-400">
                 {onlineGuests.length + 1} online
               </span>
-            </div>
+            </p>
           </div>
         </div>
 
         {/* Header Actions */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-0.5 sm:gap-1.5 shrink-0">
           <button
             type="button"
             onClick={() => setSearchOpen((s) => !s)}
@@ -606,10 +606,10 @@ export const EventChatRoom: React.FC<EventChatRoomProps> = ({
         </div>
       )}
 
-      {/* Input Bar */}
+      {/* Input Bar — min-w-0 ensures Send button is ALWAYS visible on mobile screens */}
       <form
         onSubmit={handleSend}
-        className="flex items-center gap-2 border-t border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#0B1A3A] px-3 sm:px-4 py-3"
+        className="shrink-0 flex items-center gap-1.5 sm:gap-2 border-t border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#0B1A3A] px-2.5 sm:px-4 py-2.5 sm:py-3"
       >
         <input
           ref={fileInputRef}
@@ -637,19 +637,21 @@ export const EventChatRoom: React.FC<EventChatRoomProps> = ({
 
         <input
           type="text"
+          enterKeyHint="send"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Message the squad about transport, budget, meeting point..."
-          className="flex-1 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/70 dark:bg-[#13224A] px-4 py-2.5 text-sm text-[#0A1E5C] dark:text-white placeholder:text-[#0A1E5C]/45 dark:placeholder:text-white/45 focus:border-[#1A6BFF] focus:outline-none"
+          placeholder="Message squad..."
+          className="flex-1 min-w-0 w-full rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/70 dark:bg-[#13224A] px-3.5 py-2.5 text-sm text-[#0A1E5C] dark:text-white placeholder:text-[#0A1E5C]/45 dark:placeholder:text-white/45 focus:border-[#1A6BFF] focus:outline-none"
         />
 
         <button
           type="submit"
           disabled={!text.trim() && user.memberSince !== 'Preview Mode'}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] disabled:opacity-45 text-white shadow-sm transition active:scale-95"
+          className="flex h-10 shrink-0 items-center justify-center gap-1 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] disabled:opacity-45 px-3.5 text-xs font-extrabold text-white shadow-sm transition active:scale-95"
           aria-label="Send message"
         >
           <Send className="h-4 w-4" />
+          <span>Send</span>
         </button>
       </form>
 

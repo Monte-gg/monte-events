@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   CalendarRange,
   Compass,
@@ -34,6 +34,35 @@ export const AppShell: React.FC<AppShellProps> = ({
   onPromptAuth,
   children,
 }) => {
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [visualHeight, setVisualHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const handleResize = () => {
+      const isMobile = window.innerWidth < 768;
+      if (!isMobile) {
+        setKeyboardOpen(false);
+        setVisualHeight(null);
+        return;
+      }
+      const heightRatio = vv.height / window.innerHeight;
+      const isKb = heightRatio < 0.78;
+      setKeyboardOpen(isKb);
+      setVisualHeight(Math.round(vv.height));
+    };
+
+    handleResize();
+    vv.addEventListener('resize', handleResize);
+    window.addEventListener('resize', handleResize);
+    return () => {
+      vv.removeEventListener('resize', handleResize);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
   const desktopNavItems: {
     id: AppPage;
     label: string;
@@ -54,8 +83,14 @@ export const AppShell: React.FC<AppShellProps> = ({
     return currentPage === id;
   };
 
+  const chatViewportStyle =
+    currentPage === 'chats' && visualHeight
+      ? { height: `${visualHeight}px` }
+      : undefined;
+
   return (
     <div
+      style={chatViewportStyle}
       className={`bg-[#F0F6FF] dark:bg-[#0A1430] text-[#0A1E5C] dark:text-white flex overflow-x-clip transition-colors duration-300 ${
         currentPage === 'chats' ? 'h-[100dvh] overflow-hidden' : 'min-h-[100dvh]'
       }`}
@@ -169,6 +204,7 @@ export const AppShell: React.FC<AppShellProps> = ({
 
       {/* Main Content Area */}
       <div
+        style={chatViewportStyle}
         className={`flex-1 md:pl-60 lg:pl-64 xl:pl-72 flex flex-col w-full min-w-0 overflow-x-clip ${
           currentPage === 'chats' ? 'h-[100dvh] overflow-hidden' : 'min-h-[100dvh]'
         }`}
@@ -256,15 +292,20 @@ export const AppShell: React.FC<AppShellProps> = ({
         <main
           className={
             currentPage === 'chats'
-              ? 'flex-1 min-h-0 overflow-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0 flex flex-col'
-              : 'flex-1 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-8 overflow-x-clip'
+              ? `flex-1 min-h-0 overflow-hidden ${
+                  keyboardOpen ? 'pb-0' : 'pb-[calc(4.5rem+env(safe-area-inset-bottom))]'
+                } md:pb-0 flex flex-col`
+              : `flex-1 ${
+                  keyboardOpen ? 'pb-4' : 'pb-[calc(6rem+env(safe-area-inset-bottom))]'
+                } md:pb-8 overflow-x-clip`
           }
         >
           {children}
         </main>
       </div>
 
-      {/* Native-Style 5-Tab Mobile Bottom Navigation Bar (< 768px) */}
+      {/* Native-Style 5-Tab Mobile Bottom Navigation Bar (< 768px) — auto-hides when phone keyboard is open */}
+      {!keyboardOpen && (
       <nav
         aria-label="Mobile Navigation"
         className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white/95 dark:bg-[#0B1A3A]/95 backdrop-blur-lg px-2 pt-1.5 pb-[calc(0.45rem+env(safe-area-inset-bottom))] transition-colors duration-300"
@@ -350,6 +391,7 @@ export const AppShell: React.FC<AppShellProps> = ({
           </button>
         </div>
       </nav>
+      )}
     </div>
   );
 };

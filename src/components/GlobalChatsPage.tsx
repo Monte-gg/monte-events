@@ -534,18 +534,20 @@ export const GlobalChatsPage: React.FC<GlobalChatsPageProps> = ({
                 </button>
                 <input
                   type="text"
+                  enterKeyHint="send"
                   value={dmText}
                   onChange={(e) => setDmText(e.target.value)}
                   placeholder={`Message ${selectedFriend.name.split(' ')[0]}...`}
-                  className="flex-1 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/70 dark:bg-[#13224A] px-4 py-2.5 text-sm text-[#0A1E5C] dark:text-white placeholder:text-[#0A1E5C]/45 dark:placeholder:text-white/45 focus:border-[#1A6BFF] focus:outline-none"
+                  className="flex-1 min-w-0 w-full rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/70 dark:bg-[#13224A] px-3.5 py-2.5 text-sm text-[#0A1E5C] dark:text-white placeholder:text-[#0A1E5C]/45 dark:placeholder:text-white/45 focus:border-[#1A6BFF] focus:outline-none"
                 />
                 <button
                   type="submit"
                   disabled={!dmText.trim() && user.memberSince !== 'Preview Mode'}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] disabled:opacity-45 text-white shadow-sm transition active:scale-95"
+                  className="flex h-10 shrink-0 items-center justify-center gap-1 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] disabled:opacity-45 px-3.5 text-xs font-extrabold text-white shadow-sm transition active:scale-95"
                   aria-label="Send direct message"
                 >
                   <Send className="h-4 w-4" />
+                  <span>Send</span>
                 </button>
               </form>
             </div>
