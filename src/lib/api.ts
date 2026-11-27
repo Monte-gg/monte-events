@@ -512,6 +512,84 @@ export async function createMediaOnApi(
   }
 }
 
+export async function initiateMpesaChargeOnApi(payload: {
+  roomId: string;
+  guestId?: string | null;
+  email: string;
+  phone: string;
+  amountKes: number;
+}): Promise<{
+  ok: boolean;
+  reference?: string;
+  status?: string;
+  display_text?: string;
+  error?: string;
+}> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/payments/mpesa/charge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      ok?: boolean;
+      reference?: string;
+      status?: string;
+      display_text?: string;
+      error?: string;
+    };
+    if (!res.ok || !data.ok) {
+      return {
+        ok: false,
+        error: data.error || `Could not send M-PESA prompt (${res.status}).`,
+      };
+    }
+    return {
+      ok: true,
+      reference: data.reference,
+      status: data.status,
+      display_text: data.display_text,
+    };
+  } catch {
+    return {
+      ok: false,
+      error: 'Network error contacting payment server. Please try again.',
+    };
+  }
+}
+
+export async function fetchMpesaPaymentStatusOnApi(reference: string): Promise<{
+  ok: boolean;
+  status?: 'pending' | 'success' | 'failed';
+  payout_status?: string;
+  message?: string;
+  error?: string;
+}> {
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/api/payments/mpesa/status/${encodeURIComponent(reference)}`
+    );
+    const data = (await res.json().catch(() => ({}))) as {
+      ok?: boolean;
+      status?: 'pending' | 'success' | 'failed';
+      payout_status?: string;
+      message?: string;
+      error?: string;
+    };
+    if (!res.ok || !data.ok) {
+      return { ok: false, error: data.error || 'Status check failed' };
+    }
+    return {
+      ok: true,
+      status: data.status,
+      payout_status: data.payout_status,
+      message: data.message,
+    };
+  } catch {
+    return { ok: false, error: 'Network error while checking status' };
+  }
+}
+
 export async function deleteAccountOnApi(
   accessToken: string
 ): Promise<{ ok: boolean; error?: string }> {

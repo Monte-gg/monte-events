@@ -1524,6 +1524,73 @@ function MonteAppContent() {
               onTogglePin={handleTogglePin}
               onSelectMedia={handleSelectMedia}
               onOpenFlyer={setFlyerEvent}
+              onPromptGuestPay={() =>
+                promptGuestToSignUp('Sign in to pay via M-PESA and confirm your spot.')
+              }
+              onMpesaPaymentConfirmed={async (eventId, reference) => {
+                // Optimistically confirm current user in the room & refresh live room data
+                setEvents((prev) =>
+                  prev.map((ev) => {
+                    if (ev.id !== eventId) return ev;
+                    const exists = ev.guests.some(
+                      (g) =>
+                        (user.email &&
+                          g.email &&
+                          g.email.toLowerCase() === user.email.toLowerCase()) ||
+                        g.name.toLowerCase() === user.name.toLowerCase()
+                    );
+                    if (exists) {
+                      return {
+                        ...ev,
+                        guests: ev.guests.map((g) =>
+                          (user.email &&
+                            g.email &&
+                            g.email.toLowerCase() === user.email.toLowerCase()) ||
+                          g.name.toLowerCase() === user.name.toLowerCase()
+                            ? {
+                                ...g,
+                                paid: true,
+                                paymentStatus: 'confirmed',
+                                mpesaCode: reference,
+                                paidAt: 'Paid',
+                              }
+                            : g
+                        ),
+                      };
+                    }
+                    return {
+                      ...ev,
+                      guests: [
+                        ...ev.guests,
+                        {
+                          id: `g-paid-${Date.now()}`,
+                          name: user.name,
+                          phone: user.phone || user.mpesaNumber || '',
+                          email: user.email,
+                          initials: user.initials,
+                          avatarColor: '#1A6BFF',
+                          amount: ev.costPerPerson,
+                          paid: true,
+                          paymentStatus: 'confirmed',
+                          mpesaCode: reference,
+                          online: true,
+                          paidAt: 'Paid',
+                        },
+                      ],
+                    };
+                  })
+                );
+                showToast('M-PESA payment confirmed! You are in the event.');
+                const freshRooms = await fetchRoomsFromApi();
+                if (freshRooms && freshRooms.length > 0) {
+                  const cleanFresh = freshRooms.filter(
+                    (e) =>
+                      !deletedRoomKeysRef.current.has(e.id) &&
+                      !deletedRoomKeysRef.current.has(e.inviteCode)
+                  );
+                  setEvents(cleanFresh);
+                }
+              }}
               onShowToast={showToast}
             />
           )}

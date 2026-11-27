@@ -174,3 +174,39 @@ alter table public.rooms
   add column if not exists main_guests jsonb not null default '[]'::jsonb,
   add column if not exists sub_events jsonb not null default '[]'::jsonb,
   add column if not exists location_pin_url text;
+
+-- ============================================================================
+-- Step 3 Additions: Paystack Kenya M-PESA STK Push & Host Auto-Transfer Payouts
+-- ============================================================================
+alter table public.rooms
+  add column if not exists paystack_recipient_code text;
+
+create table if not exists public.payments (
+  id uuid primary key default gen_random_uuid(),
+  room_id uuid not null references public.rooms(id) on delete cascade,
+  guest_id uuid references public.guests(id) on delete set null,
+  payer_email text not null,
+  payer_phone text not null,
+  amount_kes numeric not null,
+  paystack_reference text unique not null,
+  status text not null default 'pending'
+    check (status in ('pending', 'success', 'failed')),
+  payout_status text not null default 'pending_payout'
+    check (payout_status in ('pending_payout', 'transferred', 'payout_failed')),
+  payout_recipient_code text,
+  payout_reference text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_payments_room_id on public.payments(room_id);
+create index if not exists idx_payments_reference on public.payments(paystack_reference);
+
+alter table public.payments enable row level security;
+
+drop policy if exists "Allow read payments" on public.payments;
+create policy "Allow read payments" on public.payments
+  for select using (true);
+
+drop policy if exists "Allow authenticated write payments" on public.payments;
+create policy "Allow authenticated write payments" on public.payments
+  for all to authenticated using (true) with check (true);
