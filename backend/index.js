@@ -466,13 +466,23 @@ app.patch('/api/rooms/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/rooms/:id — permanently delete an event room and its guests/messages
+// DELETE /api/rooms/:id — permanently delete an event room from both rooms & legacy events tables
 app.delete('/api/rooms/:id', async (req, res) => {
   if (!requireSupabase(res)) return;
   try {
     const { id } = req.params;
-    const { error } = await supabase.from('rooms').delete().eq('id', id);
-    if (error) throw error;
+    const inviteCode = String(req.query.inviteCode || '').trim();
+
+    const ops = [
+      supabase.from('rooms').delete().eq('id', id),
+      supabase.from('events').delete().eq('id', id),
+    ];
+    if (inviteCode) {
+      ops.push(supabase.from('rooms').delete().eq('invite_code', inviteCode));
+      ops.push(supabase.from('events').delete().eq('invite_code', inviteCode));
+    }
+
+    await Promise.allSettled(ops);
     res.json({ ok: true, deletedId: id });
   } catch (err) {
     console.error('DELETE /api/rooms/:id failed:', err);

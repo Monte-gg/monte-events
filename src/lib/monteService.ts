@@ -874,6 +874,7 @@ export async function deleteRoomDirectlyInSupabase(
     }
     if (inviteCode) {
       ops.push(supabase.from('rooms').delete().eq('invite_code', inviteCode));
+      ops.push(supabase.from('events').delete().eq('invite_code', inviteCode));
     }
     ops.push(supabase.from('events').delete().eq('id', roomId));
     await Promise.allSettled(ops);

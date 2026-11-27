@@ -125,7 +125,7 @@ function MonteAppContent() {
     (() => {
       if (typeof window === 'undefined') return new Set<string>();
       try {
-        const raw = window.sessionStorage.getItem('monte-deleted-rooms');
+        const raw = window.localStorage.getItem('monte-deleted-rooms');
         return raw ? new Set<string>(JSON.parse(raw) as string[]) : new Set<string>();
       } catch {
         return new Set<string>();
@@ -279,15 +279,21 @@ function MonteAppContent() {
           schemaReady: synced.schemaReady || directRooms !== null,
         });
 
-        // Always prefer direct public.rooms (always-on Supabase, zero Render cold start)
-        const sourceRooms =
-          directRooms && directRooms.length > 0
-            ? directRooms
-            : synced.events && synced.events.length > 0
-            ? synced.events
-            : null;
+        // Merge public.rooms AND legacy public.events (deduplicated by inviteCode) so no room is ever hidden
+        const mergedMap = new Map<string, MonteEvent>();
+        for (const r of directRooms || []) {
+          const key = (r.inviteCode || r.id).toLowerCase();
+          mergedMap.set(key, r);
+        }
+        for (const r of synced.events || []) {
+          const key = (r.inviteCode || r.id).toLowerCase();
+          if (!mergedMap.has(key)) {
+            mergedMap.set(key, r);
+          }
+        }
+        const sourceRooms = Array.from(mergedMap.values());
 
-        if (sourceRooms && !isGuestModeRef.current) {
+        if (sourceRooms.length > 0 && !isGuestModeRef.current) {
           const cleanSynced = sourceRooms.filter(
             (e) =>
               !deletedRoomKeysRef.current.has(e.id) &&
@@ -882,7 +888,7 @@ function MonteAppContent() {
       deletedRoomKeysRef.current.add(target.inviteCode);
     }
     try {
-      window.sessionStorage.setItem(
+      window.localStorage.setItem(
         'monte-deleted-rooms',
         JSON.stringify(Array.from(deletedRoomKeysRef.current))
       );
@@ -907,9 +913,9 @@ function MonteAppContent() {
     if (activeChatEventId === eventId) {
       setActiveChatEventId(null);
     }
-    // Delete directly in Supabase (~100ms) AND via Render API in parallel
+    // Delete directly in Supabase (~100ms) AND via Render service-role API (with retry) in parallel
     void deleteRoomDirectlyInSupabase(eventId, target?.inviteCode);
-    void deleteRoomOnApi(eventId);
+    void deleteRoomOnApi(eventId, target?.inviteCode);
     void deleteEventInSupabase(eventId);
     showToast(
       target ? `Deleted room "${target.name}"` : 'Room deleted',

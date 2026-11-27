@@ -319,18 +319,23 @@ export async function createRoomOnApi(
   }
 }
 
-export async function deleteRoomOnApi(roomId: string): Promise<boolean> {
+export async function deleteRoomOnApi(
+  roomId: string,
+  inviteCode?: string
+): Promise<boolean> {
+  const qs = inviteCode ? `?inviteCode=${encodeURIComponent(inviteCode)}` : '';
+  const path = `/api/rooms/${encodeURIComponent(roomId)}${qs}`;
   try {
-    await fetchJson(
-      `/api/rooms/${encodeURIComponent(roomId)}`,
-      {
-        method: 'DELETE',
-      },
-      25000
-    );
+    await fetchJson(path, { method: 'DELETE' }, 25000);
     return true;
   } catch {
-    return false;
+    // One automatic retry in case Render dyno was waking from cold start
+    try {
+      await fetchJson(path, { method: 'DELETE' }, 25000);
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 
