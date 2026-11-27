@@ -4,6 +4,8 @@ import {
   Pause,
   X,
   Calendar,
+  Download,
+  Loader2,
   User,
   Film,
   Image as ImageIcon,
@@ -12,6 +14,7 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { MediaItem } from '../types';
+import { downloadMediaFile } from '../lib/downloadMedia';
 import { ThemeToggle } from './ThemeToggle';
 import { EASE_SKIPER, SPRING_POP, SPRING_SNAPPY } from './MotionPrimitives';
 
@@ -29,6 +32,7 @@ export const MediaLightbox: React.FC<MediaLightboxProps> = ({
   onClose,
 }) => {
   const [playing, setPlaying] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const item =
     currentIndex >= 0 && currentIndex < items.length
@@ -217,10 +221,30 @@ export const MediaLightbox: React.FC<MediaLightboxProps> = ({
                   {item.uploadedAt}
                 </span>
               </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F0F6FF] dark:bg-[#1A2D5E] px-3 py-1 font-semibold text-[#1A6BFF] dark:text-[#2B7FFF]">
-                <img src="./favicon.svg" alt="" className="h-4 w-4" />
-                Monte Media Vault
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={downloading}
+                  onClick={async () => {
+                    if (!item) return;
+                    setDownloading(true);
+                    await downloadMediaFile(item);
+                    setDownloading(false);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-[#1A6BFF] hover:bg-[#2B7FFF] disabled:opacity-60 px-3.5 py-1.5 text-xs font-extrabold text-white shadow-sm transition active:scale-95"
+                >
+                  {downloading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" />
+                  )}
+                  {downloading ? 'Downloading…' : 'Download'}
+                </button>
+                <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-[#F0F6FF] dark:bg-[#1A2D5E] px-3 py-1 font-semibold text-[#1A6BFF] dark:text-[#2B7FFF]">
+                  <img src="./favicon.svg" alt="" className="h-4 w-4" />
+                  Monte Media Vault
+                </span>
+              </div>
             </div>
           </motion.div>
         </motion.div>

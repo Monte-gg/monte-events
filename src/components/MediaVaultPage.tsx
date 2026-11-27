@@ -1,8 +1,9 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Film, Image as ImageIcon, Play, UploadCloud } from 'lucide-react';
+import { Download, Film, Image as ImageIcon, Play, UploadCloud } from 'lucide-react';
 import { MediaItem, MonteEvent, UserProfile } from '../types';
 import { AnimatePresence, motion } from 'motion/react';
 import { uploadFileToStorage } from '../lib/monteService';
+import { downloadMediaFile } from '../lib/downloadMedia';
 import { ThemeToggle } from './ThemeToggle';
 import { EASE_SKIPER, SPRING_POP, SPRING_SNAPPY } from './MotionPrimitives';
 
@@ -233,6 +234,28 @@ export const MediaVaultPage: React.FC<MediaVaultPageProps> = ({
                   {item.duration}
                 </span>
               )}
+              <span
+                role="button"
+                tabIndex={0}
+                title="Download media"
+                aria-label={`Download ${item.title}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void downloadMediaFile(item);
+                  onShowToast(`Downloading "${item.title}"…`);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void downloadMediaFile(item);
+                    onShowToast(`Downloading "${item.title}"…`);
+                  }
+                }}
+                className="absolute top-2.5 left-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-[#0A1430]/75 hover:bg-[#1A6BFF] text-white opacity-90 sm:opacity-0 sm:group-hover:opacity-100 backdrop-blur-sm shadow transition"
+              >
+                <Download className="h-3.5 w-3.5" />
+              </span>
               <div className="absolute bottom-3 left-3 right-3">
                 <p className="truncate text-xs sm:text-sm font-bold text-white">
                   {item.title}
