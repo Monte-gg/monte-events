@@ -536,6 +536,333 @@ export async function uploadMediaInSupabase(items: MediaItem[]) {
   }
 }
 
+export async function loadRoomsDirectlyFromSupabase(): Promise<MonteEvent[] | null> {
+  try {
+    const [{ data: rooms, error: roomsErr }, { data: guests }, { data: expenses }] =
+      await Promise.all([
+        supabase
+          .from('rooms')
+          .select('*')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('guests')
+          .select('*')
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('expenses')
+          .select('*')
+          .order('created_at', { ascending: false }),
+      ]);
+
+    if (roomsErr || !rooms) return null;
+
+    const guestsByRoom = new Map<string, Guest[]>();
+    for (const g of guests || []) {
+      const paid = Boolean(g.paid) || g.payment_status === 'confirmed';
+      const mapped: Guest = {
+        id: g.id,
+        name: g.name,
+        phone: g.phone || '',
+        email: g.email || undefined,
+        initials: g.initials || String(g.name || 'G').slice(0, 2).toUpperCase(),
+        avatarColor: g.avatar_color || '#1A6BFF',
+        amount: Number(g.amount || 0),
+        paid,
+        paymentStatus: paid
+          ? 'confirmed'
+          : g.payment_status === 'submitted'
+          ? 'submitted'
+          : 'pending',
+        mpesaCode: g.mpesa_code || undefined,
+        online: Boolean(g.online),
+        paidAt: g.paid_at ? 'Paid' : undefined,
+      };
+      const list = guestsByRoom.get(g.room_id) || [];
+      list.push(mapped);
+      guestsByRoom.set(g.room_id, list);
+    }
+
+    const expensesByRoom = new Map<string, MonteEvent['expenses']>();
+    for (const ex of expenses || []) {
+      const list = expensesByRoom.get(ex.room_id) || [];
+      list.push({
+        id: ex.id,
+        roomId: ex.room_id,
+        title: ex.title,
+        category: ex.category || 'Other',
+        amount: Number(ex.amount || 0),
+        paidBy: ex.paid_by || 'Host',
+        createdAt: ex.created_at,
+      });
+      expensesByRoom.set(ex.room_id, list);
+    }
+
+    return rooms.map((r) => ({
+      id: r.id,
+      name: r.name,
+      type: (r.type as EventType) || 'Roadtrip',
+      customType: r.custom_type || undefined,
+      date: r.date,
+      location: r.location || 'Nairobi, KE',
+      description: r.description || '',
+      coverImage: r.cover_image || '',
+      coverGradient:
+        r.cover_gradient || 'from-[#0B2E8F] via-[#1A6BFF] to-[#2B7FFF]',
+      totalBudget: Number(r.total_budget || 0),
+      maxGuests: Number(r.max_guests || 10),
+      costPerPerson: Number(r.cost_per_person || 0),
+      inviteCode: r.invite_code,
+      guests: guestsByRoom.get(r.id) || [],
+      expenses: expensesByRoom.get(r.id) || [],
+      budgetBreakdown: (r.budget_breakdown as BudgetBreakdown) || {
+        Transport: 0,
+        Food: 0,
+        Venue: 0,
+        DJ: 0,
+        Misc: 0,
+      },
+      unreadCount: 0,
+      createdBy: r.created_by || 'Monte Host',
+      hostEmail: r.host_email || undefined,
+      mpesaType: r.mpesa_type || undefined,
+      mpesaNumber: r.mpesa_number || undefined,
+      mpesaAccount: r.mpesa_account || undefined,
+      mpesaName: r.mpesa_name || undefined,
+      activities: Array.isArray(r.activities) ? r.activities : [],
+      mainGuests: Array.isArray(r.main_guests) ? r.main_guests : [],
+      subEvents: Array.isArray(r.sub_events) ? r.sub_events : [],
+      locationPinUrl: r.location_pin_url || undefined,
+    }));
+  } catch {
+    return null;
+  }
+}
+
+export async function createRoomDirectlyInSupabase(
+  event: MonteEvent
+): Promise<MonteEvent | null> {
+  try {
+    const basePayload = {
+      name: event.name,
+      type: event.type,
+      custom_type: event.customType || null,
+      date: event.date,
+      location: event.location,
+      description: event.description,
+      cover_image: event.coverImage,
+      cover_gradient: event.coverGradient,
+      total_budget: event.totalBudget,
+      max_guests: event.maxGuests,
+      cost_per_person: event.costPerPerson,
+      invite_code: event.inviteCode,
+      budget_breakdown: event.budgetBreakdown,
+      created_by: event.createdBy,
+    };
+
+    const fullPayload = {
+      ...basePayload,
+      ...(event.hostEmail ? { host_email: event.hostEmail } : {}),
+      ...(event.mpesaType ? { mpesa_type: event.mpesaType } : {}),
+      ...(event.mpesaNumber ? { mpesa_number: event.mpesaNumber } : {}),
+      ...(event.mpesaAccount ? { mpesa_account: event.mpesaAccount } : {}),
+      ...(event.mpesaName ? { mpesa_name: event.mpesaName } : {}),
+      ...(event.activities && event.activities.length > 0
+        ? { activities: event.activities }
+        : {}),
+      ...(event.mainGuests && event.mainGuests.length > 0
+        ? { main_guests: event.mainGuests }
+        : {}),
+      ...(event.subEvents && event.subEvents.length > 0
+        ? { sub_events: event.subEvents }
+        : {}),
+      ...(event.locationPinUrl ? { location_pin_url: event.locationPinUrl } : {}),
+    };
+
+    let { data: room, error: roomErr } = await supabase
+      .from('rooms')
+      .insert(fullPayload)
+      .select()
+      .single();
+
+    if (roomErr && /column .* does not exist/i.test(roomErr.message || '')) {
+      const retry = await supabase
+        .from('rooms')
+        .insert(basePayload)
+        .select()
+        .single();
+      room = retry.data;
+      roomErr = retry.error;
+    }
+
+    if (roomErr || !room) return null;
+
+    let savedGuests: Guest[] = event.guests;
+    if (event.guests.length > 0) {
+      const { data: gData } = await supabase
+        .from('guests')
+        .insert(
+          event.guests.map((g) => ({
+            room_id: room.id,
+            name: g.name,
+            phone: g.phone || '',
+            email: g.email || '',
+            initials: g.initials,
+            avatar_color: g.avatarColor,
+            amount: g.amount,
+            paid: g.paid,
+            online: g.online,
+          }))
+        )
+        .select();
+      if (gData && gData.length > 0) {
+        savedGuests = gData.map((g) => ({
+          id: g.id,
+          name: g.name,
+          phone: g.phone || '',
+          email: g.email || undefined,
+          initials: g.initials || 'G',
+          avatarColor: g.avatar_color || '#1A6BFF',
+          amount: Number(g.amount || 0),
+          paid: Boolean(g.paid),
+          paymentStatus: g.paid ? 'confirmed' : 'pending',
+          online: Boolean(g.online),
+        }));
+      }
+    }
+
+    if (event.expenses && event.expenses.length > 0) {
+      await supabase.from('expenses').insert(
+        event.expenses.map((ex) => ({
+          room_id: room.id,
+          title: ex.title,
+          category: ex.category,
+          amount: ex.amount,
+          paid_by: ex.paidBy,
+        }))
+      );
+    }
+
+    return {
+      ...event,
+      id: room.id,
+      guests: savedGuests,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function joinRoomDirectlyInSupabase(
+  roomId: string,
+  payload: { name: string; email?: string; phone?: string; amount?: number }
+): Promise<Guest | null> {
+  try {
+    if (!roomId || roomId.startsWith('evt-')) return null;
+
+    if (payload.email) {
+      const { data: existing } = await supabase
+        .from('guests')
+        .select('*')
+        .eq('room_id', roomId)
+        .ilike('email', payload.email.trim())
+        .maybeSingle();
+
+      if (existing) {
+        return {
+          id: existing.id,
+          name: existing.name,
+          phone: existing.phone || '',
+          email: existing.email || undefined,
+          initials: existing.initials || payload.name.slice(0, 2).toUpperCase(),
+          avatarColor: existing.avatar_color || '#1A6BFF',
+          amount: Number(existing.amount || payload.amount || 0),
+          paid: Boolean(existing.paid) || existing.payment_status === 'confirmed',
+          paymentStatus: existing.paid ? 'confirmed' : 'pending',
+          online: true,
+        };
+      }
+    }
+
+    const parts = payload.name.trim().split(/\s+/);
+    const initials = (
+      (parts[0]?.[0] || 'G') + (parts[1]?.[0] || parts[0]?.[1] || '')
+    ).toUpperCase();
+
+    const { data, error } = await supabase
+      .from('guests')
+      .insert({
+        room_id: roomId,
+        name: payload.name.trim(),
+        email: (payload.email || '').trim(),
+        phone: (payload.phone || '').trim(),
+        initials,
+        avatar_color: '#1A6BFF',
+        amount: Number(payload.amount || 0),
+        paid: false,
+        online: true,
+      })
+      .select()
+      .single();
+
+    if (error || !data) return null;
+    return {
+      id: data.id,
+      name: data.name,
+      phone: data.phone || '',
+      email: data.email || undefined,
+      initials: data.initials || initials,
+      avatarColor: data.avatar_color || '#1A6BFF',
+      amount: Number(data.amount || 0),
+      paid: Boolean(data.paid),
+      paymentStatus: 'pending',
+      online: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchInvitePreviewDirectlyFromSupabase(inviteCode: string) {
+  try {
+    const { data: room, error } = await supabase
+      .from('rooms')
+      .select('*')
+      .ilike('invite_code', inviteCode.trim())
+      .maybeSingle();
+    if (error || !room) return null;
+
+    const { data: guests } = await supabase
+      .from('guests')
+      .select('paid, payment_status')
+      .eq('room_id', room.id);
+
+    const paidCount = (guests || []).filter(
+      (g) => g.paid || g.payment_status === 'confirmed'
+    ).length;
+
+    return {
+      id: room.id,
+      name: room.name,
+      type: (room.type as EventType) || 'Roadtrip',
+      customType: room.custom_type || undefined,
+      date: room.date,
+      location: room.location || 'Nairobi, KE',
+      description: room.description || '',
+      coverImage: room.cover_image || '',
+      coverGradient:
+        room.cover_gradient || 'from-[#0B2E8F] via-[#1A6BFF] to-[#2B7FFF]',
+      costPerPerson: Number(room.cost_per_person || 0),
+      maxGuests: Number(room.max_guests || 10),
+      guestCount: (guests || []).length,
+      paidCount,
+      inviteCode: room.invite_code,
+      createdBy: room.created_by || 'Monte Host',
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function deleteRoomDirectlyInSupabase(
   roomId: string,
   inviteCode?: string

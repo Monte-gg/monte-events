@@ -27,11 +27,14 @@ import {
 } from './lib/api';
 import {
   addGuestInSupabase,
-  createEventInSupabase,
+  createRoomDirectlyInSupabase,
   deleteEventInSupabase,
   deleteRoomDirectlyInSupabase,
+  fetchInvitePreviewDirectlyFromSupabase,
   fetchProfileFromSupabase,
+  joinRoomDirectlyInSupabase,
   loadAllMonteData,
+  loadRoomsDirectlyFromSupabase,
   sendMessageInSupabase,
   signOutSupabase,
   toggleGuestPaidInSupabase,
@@ -266,20 +269,31 @@ function MonteAppContent() {
         if (sessionUser) {
           await applySupabaseSessionUser(sessionUser);
         }
-        const synced = await loadAllMonteData(sessionUser?.id || undefined);
+        const [synced, directRooms] = await Promise.all([
+          loadAllMonteData(sessionUser?.id || undefined),
+          loadRoomsDirectlyFromSupabase(),
+        ]);
         if (!mounted) return;
         setSupabaseStatus({
-          connected: synced.connected,
-          schemaReady: synced.schemaReady,
+          connected: synced.connected || directRooms !== null,
+          schemaReady: synced.schemaReady || directRooms !== null,
         });
-        if (synced.events && synced.events.length > 0 && !isGuestModeRef.current && !apiOnlineRef.current) {
-          const cleanSynced = synced.events.filter(
+
+        // Always prefer direct public.rooms (always-on Supabase, zero Render cold start)
+        const sourceRooms =
+          directRooms && directRooms.length > 0
+            ? directRooms
+            : synced.events && synced.events.length > 0
+            ? synced.events
+            : null;
+
+        if (sourceRooms && !isGuestModeRef.current) {
+          const cleanSynced = sourceRooms.filter(
             (e) =>
               !deletedRoomKeysRef.current.has(e.id) &&
               !deletedRoomKeysRef.current.has(e.inviteCode)
           );
           setEvents((prev) => {
-            // Preserve any locally created optimistic rooms not yet in Supabase events table
             const syncedCodes = new Set(cleanSynced.map((e) => e.inviteCode));
             const localOnly = prev.filter(
               (e) =>
@@ -412,6 +426,12 @@ function MonteAppContent() {
       const joinCode = params.get('join');
       if (!joinCode) return;
 
+      const directPreview = await fetchInvitePreviewDirectlyFromSupabase(joinCode);
+      if (!mounted) return;
+      if (directPreview) {
+        setInvitePreview(directPreview);
+        return;
+      }
       const apiPreview = await fetchInvitePreviewFromApi(joinCode);
       if (!mounted) return;
       if (apiPreview) {
@@ -449,28 +469,28 @@ function MonteAppContent() {
       .channel('monte-events-realtime')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'event_messages' },
+        { event: '*', schema: 'public', table: 'rooms' },
         () => {
           void syncFromSupabase();
         }
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'event_guests' },
+        { event: '*', schema: 'public', table: 'guests' },
         () => {
           void syncFromSupabase();
         }
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'events' },
+        { event: '*', schema: 'public', table: 'messages' },
         () => {
           void syncFromSupabase();
         }
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'event_media' },
+        { event: '*', schema: 'public', table: 'media' },
         () => {
           void syncFromSupabase();
         }
@@ -611,16 +631,26 @@ function MonteAppContent() {
       setMessagesByEvent({});
       setActiveEventId('');
       setActiveChatEventId(null);
-      // Reload real rooms, media & members from backend/Supabase
+      // Reload real rooms, media & members directly from Supabase + Render API
       void Promise.all([
+        loadRoomsDirectlyFromSupabase(),
         fetchRoomsFromApi(),
         fetchMediaFromApi(),
         fetchMembersFromApi(),
-      ]).then(([apiRooms, apiMedia, apiMembers]) => {
-        if (apiRooms && apiRooms.length > 0) {
-          setEvents(apiRooms);
-          setActiveEventId(apiRooms[0].id);
-          setActiveChatEventId(apiRooms[0].id);
+      ]).then(([directRooms, apiRooms, apiMedia, apiMembers]) => {
+        const resolvedRooms =
+          directRooms && directRooms.length > 0 ? directRooms : apiRooms;
+        if (resolvedRooms && resolvedRooms.length > 0) {
+          const clean = resolvedRooms.filter(
+            (e) =>
+              !deletedRoomKeysRef.current.has(e.id) &&
+              !deletedRoomKeysRef.current.has(e.inviteCode)
+          );
+          setEvents(clean);
+          if (clean.length > 0) {
+            setActiveEventId(clean[0].id);
+            setActiveChatEventId(clean[0].id);
+          }
         }
         if (apiMedia && apiMedia.length > 0) {
           setMedia(apiMedia);
@@ -730,11 +760,14 @@ function MonteAppContent() {
       ...prev,
       [newEvent.id]: [welcomeMsg],
     }));
-    void createEventInSupabase(newEvent).then(() => sendMessageInSupabase(welcomeMsg));
-    void createRoomOnApi(newEvent).then((savedRoom) => {
+    // Persist immediately to Supabase public.rooms (~150ms, never blocked by Render cold start)
+    void createRoomDirectlyInSupabase(newEvent).then(async (directSaved) => {
+      const savedRoom = directSaved || (await createRoomOnApi(newEvent));
       if (!savedRoom) return;
-      setApiStatus('online');
-      apiOnlineRef.current = true;
+      if (!directSaved) {
+        setApiStatus('online');
+        apiOnlineRef.current = true;
+      }
       const mergedRoom: MonteEvent = {
         ...newEvent,
         ...savedRoom,
@@ -765,12 +798,12 @@ function MonteAppContent() {
         const existing = prev[newEvent.id] || [welcomeMsg];
         const next = { ...prev };
         delete next[newEvent.id];
-        next[savedRoom.id] = existing.map((m) => ({ ...m, eventId: savedRoom.id }));
+        next[mergedRoom.id] = existing.map((m) => ({ ...m, eventId: mergedRoom.id }));
         return next;
       });
-      void sendRoomMessageOnApi(savedRoom.id, {
+      void sendRoomMessageOnApi(mergedRoom.id, {
         ...welcomeMsg,
-        eventId: savedRoom.id,
+        eventId: mergedRoom.id,
       });
     });
     setActiveEventId(newEvent.id);
@@ -1034,33 +1067,67 @@ function MonteAppContent() {
         );
         return;
       }
-      const res = await joinRoomOnApi(roomId, {
+
+      const targetEvent = events.find((e) => e.id === roomId);
+      const optimisticGuest: Guest = {
+        id: `g-join-${Date.now()}`,
         name: user.name,
-        email: user.email,
-        phone: user.phone,
-      });
-      if (res.ok && res.guest) {
+        email: user.email || undefined,
+        phone: user.phone || '',
+        initials: user.initials,
+        avatarColor: '#1A6BFF',
+        amount: targetEvent?.costPerPerson || 0,
+        paid: false,
+        paymentStatus: 'pending',
+        online: true,
+      };
+
+      // 1. Optimistically add user to the room immediately so joining feels instant
+      setEvents((prev) =>
+        prev.map((ev) => {
+          if (ev.id !== roomId) return ev;
+          const alreadyIn = ev.guests.some(
+            (g) =>
+              (user.email && g.email && g.email.toLowerCase() === user.email.toLowerCase()) ||
+              g.name.toLowerCase() === user.name.toLowerCase()
+          );
+          if (alreadyIn) return ev;
+          return { ...ev, guests: [...ev.guests, optimisticGuest] };
+        })
+      );
+      showToast(`You joined ${targetEvent?.name || 'the room'}!`, 'success');
+
+      // 2. Persist directly to Supabase public.guests (~150ms) AND notify Render API for Brevo email
+      const [directGuest] = await Promise.all([
+        joinRoomDirectlyInSupabase(roomId, {
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          amount: targetEvent?.costPerPerson || 0,
+        }),
+        joinRoomOnApi(roomId, {
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+        }),
+      ]);
+
+      if (directGuest) {
         setEvents((prev) =>
-          prev.map((ev) => {
-            if (ev.id !== roomId) return ev;
-            const alreadyIn = ev.guests.some(
-              (g) =>
-                g.id === res.guest!.id ||
-                (user.email && g.email === user.email)
-            );
-            if (alreadyIn) return ev;
-            return { ...ev, guests: [...ev.guests, res.guest!] };
-          })
-        );
-        showToast(
-          res.emailSent
-            ? 'You joined the room! Check your email for confirmation.'
-            : 'You joined the room!',
-          'success'
+          prev.map((ev) =>
+            ev.id === roomId
+              ? {
+                  ...ev,
+                  guests: ev.guests.map((g) =>
+                    g.id === optimisticGuest.id ? directGuest : g
+                  ),
+                }
+              : ev
+          )
         );
       }
     },
-    [isGuestMode, promptGuestToSignUp, showToast, user.email, user.name, user.phone]
+    [events, isGuestMode, promptGuestToSignUp, showToast, user.email, user.initials, user.name, user.phone]
   );
 
   // Handle ?room=<id> or ?join=<code> invite links when signed in and rooms are loaded
@@ -1410,9 +1477,16 @@ function MonteAppContent() {
     }
     setJoiningFromInvite(true);
     await handleJoinRoom(invitePreview.id);
-    const refreshedRooms = await fetchRoomsFromApi();
+    const refreshedRooms =
+      (await loadRoomsDirectlyFromSupabase()) || (await fetchRoomsFromApi());
     if (refreshedRooms && refreshedRooms.length > 0) {
-      setEvents(refreshedRooms);
+      setEvents(
+        refreshedRooms.filter(
+          (e) =>
+            !deletedRoomKeysRef.current.has(e.id) &&
+            !deletedRoomKeysRef.current.has(e.inviteCode)
+        )
+      );
     }
     setJoiningFromInvite(false);
     setActiveEventId(invitePreview.id);
