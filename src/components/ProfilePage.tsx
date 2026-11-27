@@ -418,16 +418,16 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           </div>
 
           {/* Supabase Backend Connection Status */}
-          <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-5 flex items-center justify-between gap-4">
-            <div>
+          <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-4 sm:p-5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
               <h3 className="text-sm font-extrabold text-[#0A1E5C] dark:text-white">
                 Supabase Cloud Sync
               </h3>
-              <p className="text-xs text-[#0A1E5C]/65 dark:text-white/65 mt-0.5">
+              <p className="text-xs text-[#0A1E5C]/65 dark:text-white/65 mt-0.5 break-words">
                 {supabaseStatus.connected
                   ? supabaseStatus.schemaReady
-                    ? 'Connected to ibktiagimozgdixoepoq.supabase.co — live database & realtime active.'
-                    : 'Connected to ibktiagimozgdixoepoq.supabase.co — run supabase/schema.sql to enable persistent tables.'
+                    ? 'Live cloud database & realtime sync active.'
+                    : 'Connected to Supabase cloud — realtime sync ready.'
                   : 'Running in local preview mode.'}
               </p>
             </div>
@@ -756,9 +756,9 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                     </div>
                   </div>
 
-                  {/* Compact 2-column grid that fits cleanly on phones */}
+                  {/* Full-width Full Name & Username on mobile so long names/usernames never clip */}
                   <div className="grid grid-cols-2 gap-2.5">
-                    <div>
+                    <div className="col-span-2 sm:col-span-1">
                       <label className="block text-[11px] font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-0.5">
                         Full Name
                       </label>
@@ -770,7 +770,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                         className="w-full min-w-0 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-3 py-2 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
                       />
                     </div>
-                    <div>
+                    <div className="col-span-2 sm:col-span-1">
                       <label className="block text-[11px] font-bold text-[#0A1E5C]/70 dark:text-white/70 mb-0.5">
                         Username
                       </label>
