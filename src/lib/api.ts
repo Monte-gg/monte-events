@@ -517,81 +517,80 @@ export async function createMediaOnApi(
   }
 }
 
-export async function initiateMpesaChargeOnApi(payload: {
-  roomId: string;
-  guestId?: string | null;
-  email: string;
+export async function initiatePayheroStkPushOnApi(payload: {
+  accessToken: string;
+  eventId: string;
+  amount: number;
   phone: string;
-  amountKes: number;
+  customerName?: string;
 }): Promise<{
-  ok: boolean;
+  success: boolean;
   reference?: string;
-  status?: string;
-  display_text?: string;
   error?: string;
 }> {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/payments/mpesa/charge`, {
+    const res = await fetch(`${API_BASE_URL}/api/payments/stk-push`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${payload.accessToken}`,
+      },
+      body: JSON.stringify({
+        eventId: payload.eventId,
+        amount: payload.amount,
+        phone: payload.phone,
+        customerName: payload.customerName,
+      }),
     });
     const data = (await res.json().catch(() => ({}))) as {
-      ok?: boolean;
+      success?: boolean;
       reference?: string;
-      status?: string;
-      display_text?: string;
       error?: string;
     };
-    if (!res.ok || !data.ok) {
+    if (!res.ok || !data.success) {
       return {
-        ok: false,
+        success: false,
         error: data.error || `Could not send M-PESA prompt (${res.status}).`,
       };
     }
     return {
-      ok: true,
+      success: true,
       reference: data.reference,
-      status: data.status,
-      display_text: data.display_text,
     };
   } catch {
     return {
-      ok: false,
+      success: false,
       error: 'Network error contacting payment server. Please try again.',
     };
   }
 }
 
-export async function fetchMpesaPaymentStatusOnApi(reference: string): Promise<{
-  ok: boolean;
-  status?: 'pending' | 'success' | 'failed';
-  payout_status?: string;
-  message?: string;
+export async function fetchPayheroPaymentStatusOnApi(reference: string): Promise<{
+  success: boolean;
+  status?: 'pending' | 'paid' | 'failed';
+  mpesaReceipt?: string | null;
   error?: string;
 }> {
   try {
     const res = await fetch(
-      `${API_BASE_URL}/api/payments/mpesa/status/${encodeURIComponent(reference)}`
+      `${API_BASE_URL}/api/payments/status/${encodeURIComponent(reference)}`
     );
     const data = (await res.json().catch(() => ({}))) as {
-      ok?: boolean;
-      status?: 'pending' | 'success' | 'failed';
-      payout_status?: string;
-      message?: string;
+      success?: boolean;
+      status?: 'pending' | 'paid' | 'failed';
+      mpesaReceipt?: string | null;
       error?: string;
     };
-    if (!res.ok || !data.ok) {
-      return { ok: false, error: data.error || 'Status check failed' };
+    if (!res.ok || !data.success) {
+      return { success: false, error: data.error || 'Status check failed' };
     }
     return {
-      ok: true,
+      success: true,
       status: data.status,
-      payout_status: data.payout_status,
-      message: data.message,
+      mpesaReceipt: data.mpesaReceipt || null,
     };
   } catch {
-    return { ok: false, error: 'Network error while checking status' };
+    return { success: false, error: 'Network error while checking status' };
   }
 }
 

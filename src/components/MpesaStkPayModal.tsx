@@ -11,9 +11,10 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import { MonteEvent, UserProfile } from '../types';
 import { formatKES } from '../data/sampleData';
+import { supabase } from '../lib/supabase';
 import {
-  fetchMpesaPaymentStatusOnApi,
-  initiateMpesaChargeOnApi,
+  fetchPayheroPaymentStatusOnApi,
+  initiatePayheroStkPushOnApi,
 } from '../lib/api';
 import { SPRING_POP, SPRING_SNAPPY } from './MotionPrimitives';
 
@@ -21,9 +22,8 @@ interface MpesaStkPayModalProps {
   open: boolean;
   event: MonteEvent;
   user: UserProfile;
-  guestId?: string | null;
   onClose: () => void;
-  onPaymentConfirmed: (reference: string) => void;
+  onPaymentConfirmed: (receiptOrRef: string) => void;
 }
 
 type PayStage = 'form' | 'submitting' | 'waiting_pin' | 'confirmed' | 'failed';
@@ -32,7 +32,6 @@ export const MpesaStkPayModal: React.FC<MpesaStkPayModalProps> = ({
   open,
   event,
   user,
-  guestId = null,
   onClose,
   onPaymentConfirmed,
 }) => {
@@ -43,12 +42,10 @@ export const MpesaStkPayModal: React.FC<MpesaStkPayModalProps> = ({
 
   const [phone, setPhone] = useState(defaultPhone);
   const [stage, setStage] = useState<PayStage>('form');
-  const [displayText, setDisplayText] = useState(
-    'Check your phone and enter your M-PESA PIN to complete payment.'
-  );
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [reference, setReference] = useState<string>('');
-  const [secondsLeft, setSecondsLeft] = useState<number>(90);
+  const [mpesaReceipt, setMpesaReceipt] = useState<string | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState<number>(60);
 
   const pollIntervalRef = useRef<number | null>(null);
   const countdownRef = useRef<number | null>(null);
@@ -70,7 +67,8 @@ export const MpesaStkPayModal: React.FC<MpesaStkPayModalProps> = ({
       setStage('form');
       setErrorMsg(null);
       setReference('');
-      setSecondsLeft(90);
+      setMpesaReceipt(null);
+      setSecondsLeft(60);
     } else {
       clearTimers();
     }
@@ -89,7 +87,7 @@ export const MpesaStkPayModal: React.FC<MpesaStkPayModalProps> = ({
   const startPolling = (ref: string) => {
     clearTimers();
     let elapsed = 0;
-    setSecondsLeft(90);
+    setSecondsLeft(60);
 
     countdownRef.current = window.setInterval(() => {
       setSecondsLeft((prev) => (prev > 0 ? prev - 1 : 0));
@@ -97,31 +95,33 @@ export const MpesaStkPayModal: React.FC<MpesaStkPayModalProps> = ({
 
     pollIntervalRef.current = window.setInterval(async () => {
       elapsed += 3;
-      const statusRes = await fetchMpesaPaymentStatusOnApi(ref);
+      const statusRes = await fetchPayheroPaymentStatusOnApi(ref);
 
-      if (statusRes.ok && statusRes.status === 'success') {
+      if (statusRes.success && statusRes.status === 'paid') {
         clearTimers();
+        const receiptCode = statusRes.mpesaReceipt || ref;
+        setMpesaReceipt(receiptCode);
         setStage('confirmed');
-        onPaymentConfirmed(ref);
+        onPaymentConfirmed(receiptCode);
         window.setTimeout(() => {
           onClose();
-        }, 2200);
+        }, 2400);
         return;
       }
 
-      if (statusRes.ok && statusRes.status === 'failed') {
+      if (statusRes.success && statusRes.status === 'failed') {
         clearTimers();
         setErrorMsg(
-          statusRes.message || 'M-PESA payment was cancelled or failed. Please try again.'
+          'M-PESA payment was cancelled or failed. Please try again.'
         );
         setStage('failed');
         return;
       }
 
-      if (elapsed >= 90) {
+      if (elapsed >= 60) {
         clearTimers();
         setErrorMsg(
-          'Payment confirmation timed out. If you completed the PIN prompt, wait a few seconds and refresh — otherwise try again.'
+          'Timed out waiting for M-PESA confirmation. If you already paid, use "I\'ve Paid (Paste M-PESA Code)" or try again.'
         );
         setStage('failed');
       }
@@ -138,32 +138,29 @@ export const MpesaStkPayModal: React.FC<MpesaStkPayModalProps> = ({
     setErrorMsg(null);
     setStage('submitting');
 
-    const res = await initiateMpesaChargeOnApi({
-      roomId: event.id,
-      guestId,
-      email: user.email || `${user.username || 'guest'}@monteevents.app`,
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) {
+      setErrorMsg('Please sign in again to complete your M-PESA payment.');
+      setStage('failed');
+      return;
+    }
+
+    const res = await initiatePayheroStkPushOnApi({
+      accessToken,
+      eventId: event.id,
+      amount: event.costPerPerson,
       phone: cleaned,
-      amountKes: event.costPerPerson,
+      customerName: user.name || user.email,
     });
 
-    if (!res.ok || !res.reference) {
+    if (!res.success || !res.reference) {
       setErrorMsg(res.error || 'Could not send M-PESA prompt. Please try again.');
       setStage('failed');
       return;
     }
 
     setReference(res.reference);
-    if (res.display_text) {
-      setDisplayText(res.display_text);
-    }
-
-    if (res.status === 'success') {
-      setStage('confirmed');
-      onPaymentConfirmed(res.reference);
-      window.setTimeout(() => onClose(), 2000);
-      return;
-    }
-
     setStage('waiting_pin');
     startPolling(res.reference);
   };
@@ -201,7 +198,7 @@ export const MpesaStkPayModal: React.FC<MpesaStkPayModalProps> = ({
                   Pay via M-PESA
                 </h3>
                 <p className="truncate text-xs text-[#0A1E5C]/65 dark:text-white/65">
-                  Instant STK Push · Powered by Paystack
+                  Instant STK Push · Powered by PayHero
                 </p>
               </div>
             </div>
@@ -313,10 +310,10 @@ export const MpesaStkPayModal: React.FC<MpesaStkPayModalProps> = ({
                 </div>
                 <div className="space-y-1">
                   <h4 className="text-base font-extrabold text-[#0A1E5C] dark:text-white">
-                    Check your phone — enter your M-PESA PIN
+                    Check your phone and enter your M-PESA PIN...
                   </h4>
                   <p className="text-xs text-[#0A1E5C]/70 dark:text-white/70 max-w-xs mx-auto leading-relaxed">
-                    {displayText}
+                    Once you enter your M-PESA PIN, your spot will automatically confirm here.
                   </p>
                 </div>
                 <div className="inline-flex items-center gap-2 rounded-full bg-[#F0F6FF] dark:bg-[#0B1A3A] border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-4 py-1.5 text-xs font-bold text-[#1A6BFF] dark:text-[#2B7FFF]">
@@ -343,10 +340,15 @@ export const MpesaStkPayModal: React.FC<MpesaStkPayModalProps> = ({
                   <CheckCircle2 className="h-9 w-9" />
                 </span>
                 <h4 className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">
-                  Payment Confirmed! You&apos;re in the event
+                  Paid! Payment Confirmed
                 </h4>
+                {mpesaReceipt && (
+                  <span className="inline-block rounded-full bg-emerald-500/15 border border-emerald-500/35 px-3.5 py-1 text-xs font-mono font-extrabold text-emerald-700 dark:text-emerald-300">
+                    M-PESA Receipt: {mpesaReceipt}
+                  </span>
+                )}
                 <p className="text-xs text-[#0A1E5C]/70 dark:text-white/70">
-                  Your spot for <strong>{event.name}</strong> is locked in and a receipt has been emailed to you.
+                  Your spot for <strong>{event.name}</strong> is locked in!
                 </p>
               </motion.div>
             )}
@@ -389,7 +391,7 @@ export const MpesaStkPayModal: React.FC<MpesaStkPayModalProps> = ({
 
             <div className="flex items-center justify-center gap-1.5 pt-1 text-[10px] font-semibold text-[#0A1E5C]/50 dark:text-white/50">
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-              Secured by Paystack Kenya M-PESA
+              Secured by PayHero Kenya M-PESA
             </div>
           </div>
         </motion.div>

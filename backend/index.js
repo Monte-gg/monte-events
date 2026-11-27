@@ -11,15 +11,10 @@ import {
   sendWelcomeEmail,
 } from './mailer.js';
 import {
-  calculateNetPayoutKes,
-  createHostTransferRecipient,
-  initiateHostTransfer,
-  initiateMpesaCharge,
-  isPaystackConfigured,
-  normalizeKenyanPhonePlus254,
-  verifyPaystackSignature,
-  verifyPaystackTransaction,
-} from './paystack.js';
+  initiatePayheroStkPush,
+  isPayheroConfigured,
+  normalizeKenyanPhone,
+} from './payhero.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -55,14 +50,7 @@ app.use(
   })
 );
 
-app.use(
-  express.json({
-    limit: '5mb',
-    verify: (req, _res, buf) => {
-      req.rawBody = buf;
-    },
-  })
-);
+app.use(express.json({ limit: '5mb' }));
 
 function requireSupabase(res) {
   if (!isSupabaseConfigured || !supabase) {
@@ -1147,427 +1135,373 @@ app.delete('/api/auth/delete-account', handleDeleteAccount);
 app.delete('/api/account', handleDeleteAccount);
 
 // ============================================================================
-// Paystack Kenya M-PESA STK Push + Host Auto-Transfer Payout Endpoints
+// PayHero Kenya API v2 — M-PESA STK Push, Webhook & Status Polling
 // ============================================================================
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const pendingPaymentsMemory = new Map();
+const payheroPaymentsMemory = new Map();
 
-async function finalizeSuccessfulMpesaPayment(paymentRow) {
-  if (!paymentRow || !supabase) return paymentRow;
-
-  let updatedPayment = paymentRow;
-
-  if (paymentRow._memoryOnly) {
-    if (paymentRow.status === 'success') return paymentRow;
-    paymentRow.status = 'success';
-    pendingPaymentsMemory.set(paymentRow.paystack_reference, paymentRow);
-    updatedPayment = paymentRow;
-  } else {
-    // Atomic idempotent transition pending -> success so webhook & polling never double-process
-    const { data: claimed, error: claimErr } = await supabase
-      .from('payments')
-      .update({ status: 'success' })
-      .eq('id', paymentRow.id)
-      .neq('status', 'success')
-      .select()
-      .maybeSingle();
-
-    if (claimErr) {
-      console.error('[paystack] Failed to claim payment row:', claimErr.message);
-      return paymentRow;
-    }
-    if (!claimed) {
-      // Already processed by an earlier webhook or poll
-      return { ...paymentRow, status: 'success' };
-    }
-    updatedPayment = claimed;
-  }
-
-  // 1. Fetch room details
-  const { data: room } = await supabase
-    .from('rooms')
-    .select('*')
-    .eq('id', updatedPayment.room_id)
-    .maybeSingle();
-
-  // 2. Confirm guest in room (by guest_id or matching payer_email)
-  let confirmedGuest = null;
-  const nowIso = new Date().toISOString();
-  if (updatedPayment.guest_id) {
-    const { data: g } = await supabase
-      .from('guests')
-      .update({
-        paid: true,
-        payment_status: 'confirmed',
-        mpesa_code: updatedPayment.paystack_reference,
-        paid_at: nowIso,
-      })
-      .eq('id', updatedPayment.guest_id)
-      .select()
-      .maybeSingle();
-    confirmedGuest = g;
-  } else if (updatedPayment.payer_email && updatedPayment.room_id) {
-    const { data: existing } = await supabase
-      .from('guests')
+async function confirmAttendeePayment({
+  eventId,
+  userEmail,
+  customerName,
+  phone,
+  amount,
+  receipt,
+}) {
+  if (!supabase || !eventId || !UUID_RE.test(String(eventId))) return;
+  try {
+    const nowIso = new Date().toISOString();
+    const { data: room } = await supabase
+      .from('rooms')
       .select('*')
-      .eq('room_id', updatedPayment.room_id)
-      .ilike('email', updatedPayment.payer_email)
+      .eq('id', eventId)
       .maybeSingle();
 
-    if (existing) {
-      const { data: g } = await supabase
+    let confirmedGuest = null;
+    if (userEmail) {
+      const { data: existing } = await supabase
         .from('guests')
-        .update({
-          paid: true,
-          payment_status: 'confirmed',
-          mpesa_code: updatedPayment.paystack_reference,
-          paid_at: nowIso,
-        })
-        .eq('id', existing.id)
-        .select()
+        .select('*')
+        .eq('room_id', eventId)
+        .ilike('email', userEmail)
         .maybeSingle();
-      confirmedGuest = g;
-    } else {
-      const fallbackName = updatedPayment.payer_email.split('@')[0] || 'Guest';
-      const { data: g } = await supabase
-        .from('guests')
-        .insert({
-          room_id: updatedPayment.room_id,
-          name: fallbackName,
-          email: updatedPayment.payer_email,
-          phone: updatedPayment.payer_phone || '',
-          initials: fallbackName.slice(0, 2).toUpperCase(),
-          avatar_color: '#1A6BFF',
-          amount: Number(updatedPayment.amount_kes) || 0,
-          paid: true,
-          payment_status: 'confirmed',
-          mpesa_code: updatedPayment.paystack_reference,
-          online: true,
-          paid_at: nowIso,
-        })
-        .select()
-        .maybeSingle();
-      confirmedGuest = g;
-    }
-  }
 
-  // 3. Send Brevo "Payment Confirmed — You're in!" email to guest (non-fatal)
-  const recipientEmail = confirmedGuest?.email || updatedPayment.payer_email;
-  if (recipientEmail && room) {
-    void sendPaymentConfirmedToGuestEmail({
-      guestEmail: recipientEmail,
-      guestName: confirmedGuest?.name || recipientEmail.split('@')[0],
-      room,
-      amountKes: Number(updatedPayment.amount_kes) || Number(room.cost_per_person || 0),
-      frontendUrl: FRONTEND_URL,
-    }).catch((mailErr) => {
-      console.error('[paystack] Guest confirmation email error:', mailErr?.message);
-    });
-  }
-
-  // 4. Host M-PESA Payout via Paystack Transfers (if PAYSTACK_AUTO_TRANSFER === "true")
-  const autoTransfer =
-    String(process.env.PAYSTACK_AUTO_TRANSFER || 'false').toLowerCase() === 'true';
-
-  if (autoTransfer && room && room.mpesa_number) {
-    try {
-      let recipientCode = room.paystack_recipient_code || null;
-      if (!recipientCode) {
-        const recRes = await createHostTransferRecipient({
-          mpesaType: room.mpesa_type || 'phone',
-          mpesaNumber: room.mpesa_number,
-          mpesaName: room.mpesa_name || room.created_by || 'Monte Event Host',
-        });
-        recipientCode = recRes?.data?.recipient_code || null;
-        if (recipientCode) {
-          await supabase
-            .from('rooms')
-            .update({ paystack_recipient_code: recipientCode })
-            .eq('id', room.id);
-        }
-      }
-
-      const netPayoutKes = calculateNetPayoutKes(updatedPayment.amount_kes);
-      if (!recipientCode || netPayoutKes < 10) {
-        await supabase
-          .from('payments')
+      if (existing) {
+        const { data: g } = await supabase
+          .from('guests')
           .update({
-            payout_status: 'pending_payout',
-            payout_recipient_code: recipientCode,
+            paid: true,
+            payment_status: 'confirmed',
+            mpesa_code: receipt || null,
+            paid_at: nowIso,
           })
-          .eq('id', updatedPayment.id);
+          .eq('id', existing.id)
+          .select()
+          .maybeSingle();
+        confirmedGuest = g;
       } else {
-        const payoutRef = `PAYOUT-${updatedPayment.paystack_reference}`;
-        await initiateHostTransfer({
-          amountKes: netPayoutKes,
-          recipientCode,
-          reason: `Monte Events payout for ${room.name}`,
-          reference: payoutRef,
-        });
-        await supabase
-          .from('payments')
-          .update({
-            payout_status: 'transferred',
-            payout_recipient_code: recipientCode,
-            payout_reference: payoutRef,
+        const displayName = customerName || userEmail.split('@')[0] || 'Guest';
+        const parts = displayName.trim().split(/\s+/);
+        const initials = (
+          (parts[0]?.[0] || 'G') + (parts[1]?.[0] || parts[0]?.[1] || '')
+        ).toUpperCase();
+        const { data: g } = await supabase
+          .from('guests')
+          .insert({
+            room_id: eventId,
+            name: displayName,
+            email: userEmail,
+            phone: phone || '',
+            initials,
+            avatar_color: '#1A6BFF',
+            amount: Number(amount) || Number(room?.cost_per_person || 0),
+            paid: true,
+            payment_status: 'confirmed',
+            mpesa_code: receipt || null,
+            online: true,
+            paid_at: nowIso,
           })
-          .eq('id', updatedPayment.id);
+          .select()
+          .maybeSingle();
+        confirmedGuest = g;
       }
-    } catch (transferErr) {
-      console.error(
-        '[paystack] Host auto-transfer failed (keeping guest confirmed & logging pending_payout):',
-        transferErr?.message || transferErr
-      );
-      await supabase
-        .from('payments')
-        .update({ payout_status: 'pending_payout' })
-        .eq('id', updatedPayment.id);
     }
-  } else {
-    await supabase
-      .from('payments')
-      .update({ payout_status: 'pending_payout' })
-      .eq('id', updatedPayment.id);
-  }
 
-  return updatedPayment;
+    const recipientEmail = confirmedGuest?.email || userEmail;
+    if (recipientEmail && room) {
+      void sendPaymentConfirmedToGuestEmail({
+        guestEmail: recipientEmail,
+        guestName: confirmedGuest?.name || customerName || recipientEmail.split('@')[0],
+        room,
+        amountKes: Number(amount) || Number(room.cost_per_person || 0),
+        frontendUrl: FRONTEND_URL,
+      }).catch((mailErr) => {
+        console.error('[payhero] Guest confirmation email error:', mailErr?.message);
+      });
+    }
+  } catch (err) {
+    console.error('[payhero] Failed to confirm attendee guest row:', err?.message);
+  }
 }
 
-// 1. POST /api/payments/mpesa/charge — Initiate Paystack Kenya M-PESA STK Push
-app.post('/api/payments/mpesa/charge', async (req, res) => {
+// 1. POST /api/payments/stk-push — Authenticated PayHero Kenya M-PESA STK Push
+app.post('/api/payments/stk-push', async (req, res) => {
   if (!requireSupabase(res)) return;
-  if (!isPaystackConfigured()) {
+  if (!isPayheroConfigured()) {
     return res.status(503).json({
-      ok: false,
-      error: 'Paystack is not configured on the server yet (missing PAYSTACK_SECRET_KEY).',
+      success: false,
+      error:
+        'PayHero is not configured on the server yet (missing PAYHERO_AUTH_TOKEN or PAYHERO_CHANNEL_ID).',
     });
   }
+
   try {
-    const { roomId, guestId = null, email, phone, amountKes } = req.body || {};
-    if (!roomId || !email || !phone || !amountKes) {
-      return res.status(400).json({
-        ok: false,
-        error: 'roomId, email, phone, and amountKes are required.',
+    // Require authenticated Supabase user
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required. Please sign in to pay via M-PESA.',
       });
     }
 
-    const normalizedPhone = normalizeKenyanPhonePlus254(phone);
+    const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+    if (userErr || !userData?.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid or expired session. Please sign in again.',
+      });
+    }
+
+    const authUser = userData.user;
+    const { eventId, amount, phone, customerName } = req.body || {};
+    if (!eventId || !amount || !phone) {
+      return res.status(400).json({
+        success: false,
+        error: 'eventId, amount, and phone are required.',
+      });
+    }
+
+    const normalizedPhone = normalizeKenyanPhone(phone);
     if (!normalizedPhone) {
       return res.status(400).json({
-        ok: false,
-        error: 'Enter a valid Kenyan M-PESA phone number (e.g. 07XX XXX XXX or 01XX XXX XXX).',
+        success: false,
+        error: 'Enter a valid Kenyan M-PESA number (e.g. 0712 345 678 or 0112 345 678).',
       });
     }
 
-    const numericAmount = Math.round(Number(amountKes));
-    if (!numericAmount || numericAmount < 1) {
+    const roundedAmount = Math.round(Number(amount));
+    if (!roundedAmount || roundedAmount < 1) {
       return res.status(400).json({
-        ok: false,
-        error: 'Amount must be at least KES 1.',
+        success: false,
+        error: 'Payment amount must be at least KES 1.',
       });
     }
 
-    const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const reference = `MONTE-${Date.now()}-${randomPart}`;
-    const validRoomUuid = UUID_RE.test(String(roomId));
-    const validGuestUuid = guestId && UUID_RE.test(String(guestId));
+    const resolvedName =
+      String(customerName || '').trim() ||
+      authUser.user_metadata?.full_name ||
+      authUser.user_metadata?.name ||
+      authUser.email ||
+      'Monte Guest';
 
-    // Try inserting pending payment record in Supabase; gracefully fall back to in-memory
-    // if payments table isn't migrated yet or roomId is a legacy non-UUID id so STK push never blocks.
-    let savedInDb = false;
-    if (validRoomUuid) {
+    const shortId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const reference = `MONTE-${Date.now()}-${shortId}`;
+
+    // Store pending payment record in Supabase (with graceful memory fallback)
+    const memoryRecord = {
+      event_id: String(eventId),
+      user_id: authUser.id,
+      user_email: authUser.email || '',
+      customer_name: resolvedName,
+      amount: roundedAmount,
+      phone: normalizedPhone,
+      reference,
+      provider: 'payhero',
+      status: 'pending',
+      mpesa_receipt: null,
+    };
+    payheroPaymentsMemory.set(reference, memoryRecord);
+
+    try {
       const { error: insertErr } = await supabase.from('payments').insert({
-        room_id: roomId,
-        guest_id: validGuestUuid ? guestId : null,
-        payer_email: String(email).trim(),
-        payer_phone: normalizedPhone,
-        amount_kes: numericAmount,
-        paystack_reference: reference,
+        event_id: String(eventId),
+        user_id: authUser.id,
+        amount: roundedAmount,
+        phone: normalizedPhone,
+        reference,
+        provider: 'payhero',
         status: 'pending',
-        payout_status: 'pending_payout',
       });
       if (insertErr) {
-        console.warn(
-          '[paystack] payments table insert skipped (falling back to memory):',
-          insertErr.message
-        );
-      } else {
-        savedInDb = true;
+        console.warn('[payhero] payments table insert warning:', insertErr.message);
       }
+    } catch (dbErr) {
+      console.warn('[payhero] payments table insert skipped:', dbErr?.message);
     }
 
-    if (!savedInDb) {
-      pendingPaymentsMemory.set(reference, {
-        id: reference,
-        room_id: roomId,
-        guest_id: validGuestUuid ? guestId : null,
-        payer_email: String(email).trim(),
-        payer_phone: normalizedPhone,
-        amount_kes: numericAmount,
-        paystack_reference: reference,
-        status: 'pending',
-        payout_status: 'pending_payout',
-        _memoryOnly: true,
-      });
-    }
-
-    const chargeRes = await initiateMpesaCharge({
-      email: String(email).trim(),
-      amountKes: numericAmount,
-      reference,
+    await initiatePayheroStkPush({
+      amount: roundedAmount,
       phone: normalizedPhone,
-      metadata: {
-        room_id: roomId,
-        guest_id: guestId || null,
-      },
-    });
-
-    const chargeData = chargeRes?.data || {};
-    const status = chargeData.status || 'pay_offline';
-    const displayText =
-      chargeData.display_text ||
-      'Check your phone and enter your M-PESA PIN to complete payment.';
-
-    res.json({
-      ok: true,
       reference,
-      status,
-      display_text: displayText,
+      customerName: resolvedName,
     });
+
+    return res.json({ success: true, reference });
   } catch (err) {
-    console.error('POST /api/payments/mpesa/charge failed:', err);
-    res.status(err.statusCode || 500).json({
-      ok: false,
-      error: err.message || 'Failed to initiate M-PESA prompt.',
+    console.error('POST /api/payments/stk-push failed:', err);
+    return res.status(err.statusCode || 500).json({
+      success: false,
+      error: err.message || 'Failed to initiate M-PESA STK Push.',
     });
   }
 });
 
-// 2. GET /api/payments/mpesa/status/:reference — Poll payment status
-app.get('/api/payments/mpesa/status/:reference', async (req, res) => {
-  if (!requireSupabase(res)) return;
+// 2. POST /api/webhooks/payhero — PayHero Kenya v2 callback handler
+app.post('/api/webhooks/payhero', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const payload = body.response || body;
+
+    const reference = String(
+      payload.ExternalReference ||
+        payload.external_reference ||
+        body.ExternalReference ||
+        body.external_reference ||
+        ''
+    ).trim();
+    const statusRaw = String(
+      payload.Status || payload.status || body.Status || body.status || ''
+    ).trim();
+    const resultCode =
+      payload.ResultCode ??
+      payload.result_code ??
+      body.ResultCode ??
+      body.result_code;
+    const mpesaReceipt = String(
+      payload.MpesaReceiptNumber ||
+        payload.mpesa_receipt_number ||
+        body.MpesaReceiptNumber ||
+        body.mpesa_receipt_number ||
+        ''
+    ).trim();
+
+    if (!reference) {
+      return res.status(200).json({ received: true });
+    }
+
+    const isSuccess =
+      Number(resultCode) === 0 || statusRaw.toUpperCase() === 'SUCCESS';
+
+    const memRec = payheroPaymentsMemory.get(reference) || null;
+
+    if (isSuccess) {
+      let alreadyPaid = false;
+      let eventId = memRec?.event_id || null;
+      let userId = memRec?.user_id || null;
+      let userEmail = memRec?.user_email || '';
+      let customerName = memRec?.customer_name || '';
+      let phone = memRec?.phone || '';
+      let amount = memRec?.amount || 0;
+
+      if (memRec) {
+        if (memRec.status === 'paid') alreadyPaid = true;
+        memRec.status = 'paid';
+        memRec.mpesa_receipt = mpesaReceipt || reference;
+        payheroPaymentsMemory.set(reference, memRec);
+      }
+
+      if (supabase) {
+        const { data: claimed } = await supabase
+          .from('payments')
+          .update({
+            status: 'paid',
+            mpesa_receipt: mpesaReceipt || reference,
+          })
+          .eq('reference', reference)
+          .neq('status', 'paid')
+          .select()
+          .maybeSingle();
+
+        if (claimed) {
+          alreadyPaid = false;
+          eventId = claimed.event_id || eventId;
+          userId = claimed.user_id || userId;
+          phone = claimed.phone || phone;
+          amount = claimed.amount || amount;
+        }
+      }
+
+      if (!alreadyPaid) {
+        if (!userEmail && userId && supabase) {
+          try {
+            const { data: uData } = await supabase.auth.admin.getUserById(userId);
+            if (uData?.user) {
+              userEmail = uData.user.email || '';
+              customerName =
+                customerName ||
+                uData.user.user_metadata?.full_name ||
+                uData.user.user_metadata?.name ||
+                '';
+            }
+          } catch {
+            // Best-effort lookup
+          }
+        }
+
+        await confirmAttendeePayment({
+          eventId,
+          userEmail,
+          customerName,
+          phone,
+          amount,
+          receipt: mpesaReceipt || reference,
+        });
+      }
+    } else {
+      if (memRec && memRec.status === 'pending') {
+        memRec.status = 'failed';
+        payheroPaymentsMemory.set(reference, memRec);
+      }
+      if (supabase) {
+        await supabase
+          .from('payments')
+          .update({ status: 'failed' })
+          .eq('reference', reference)
+          .eq('status', 'pending');
+      }
+    }
+
+    return res.status(200).json({ received: true });
+  } catch (err) {
+    console.error('POST /api/webhooks/payhero failed:', err);
+    return res.status(200).json({ received: true });
+  }
+});
+
+// 3. GET /api/payments/status/:reference — Poll PayHero payment status
+app.get('/api/payments/status/:reference', async (req, res) => {
   try {
     const reference = String(req.params.reference || '').trim();
     if (!reference) {
-      return res.status(400).json({ ok: false, error: 'Payment reference is required.' });
+      return res.status(400).json({ success: false, error: 'Reference is required.' });
     }
 
-    let payment = null;
-    try {
-      const { data, error: findErr } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('paystack_reference', reference)
-        .maybeSingle();
-      if (!findErr && data) payment = data;
-    } catch {
-      // Fall back to in-memory map
-    }
-    if (!payment) {
-      payment = pendingPaymentsMemory.get(reference) || null;
-    }
-    if (!payment) {
-      return res.status(404).json({ ok: false, error: 'Payment not found.' });
-    }
+    const memRec = payheroPaymentsMemory.get(reference) || null;
+    let dbRec = null;
 
-    if (payment.status === 'success' || payment.status === 'failed') {
-      return res.json({
-        ok: true,
-        reference,
-        status: payment.status,
-        payout_status: payment.payout_status,
-      });
-    }
-
-    // Still pending — verify live with Paystack
-    if (isPaystackConfigured()) {
+    if (supabase) {
       try {
-        const verifyRes = await verifyPaystackTransaction(reference);
-        const gatewayStatus = verifyRes?.data?.status;
-        if (gatewayStatus === 'success') {
-          const finalized = await finalizeSuccessfulMpesaPayment(payment);
-          return res.json({
-            ok: true,
-            reference,
-            status: 'success',
-            payout_status: finalized?.payout_status || 'pending_payout',
-          });
-        }
-        if (gatewayStatus === 'failed' || gatewayStatus === 'abandoned') {
-          if (payment._memoryOnly) {
-            payment.status = 'failed';
-            pendingPaymentsMemory.set(reference, payment);
-          } else {
-            await supabase
-              .from('payments')
-              .update({ status: 'failed' })
-              .eq('id', payment.id);
-          }
-          return res.json({
-            ok: true,
-            reference,
-            status: 'failed',
-            message: verifyRes?.data?.gateway_response || 'Payment was not completed.',
-          });
-        }
-      } catch (verifyErr) {
-        // Transaction may still be awaiting user PIN entry
-        console.warn('[paystack] Verify poll pending:', verifyErr?.message);
+        const { data } = await supabase
+          .from('payments')
+          .select('reference, status, mpesa_receipt, amount, event_id')
+          .eq('reference', reference)
+          .maybeSingle();
+        if (data) dbRec = data;
+      } catch {
+        // Fall back to memory map
       }
+    }
+
+    const record = dbRec || memRec;
+    if (!record) {
+      return res.status(404).json({ success: false, error: 'Payment not found.' });
     }
 
     return res.json({
-      ok: true,
+      success: true,
       reference,
-      status: 'pending',
+      status: record.status || 'pending',
+      mpesaReceipt: record.mpesa_receipt || null,
     });
   } catch (err) {
-    console.error('GET /api/payments/mpesa/status/:reference failed:', err);
-    res.status(500).json({ ok: false, error: err.message || 'Failed to check payment status.' });
-  }
-});
-
-// 3. POST /api/webhooks/paystack — Verified HMAC SHA-512 Paystack webhook
-app.post('/api/webhooks/paystack', async (req, res) => {
-  try {
-    const signature = req.headers['x-paystack-signature'];
-    if (!verifyPaystackSignature(req.rawBody, signature)) {
-      return res.status(401).json({ ok: false, error: 'Invalid Paystack signature' });
-    }
-
-    const eventType = req.body?.event;
-    const data = req.body?.data || {};
-    const reference = data.reference;
-
-    if (eventType === 'charge.success' && reference && supabase) {
-      const { data: payment } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('paystack_reference', reference)
-        .maybeSingle();
-
-      if (payment) {
-        await finalizeSuccessfulMpesaPayment(payment);
-      }
-    } else if (
-      (eventType === 'charge.failed' || data.status === 'failed') &&
-      reference &&
-      supabase
-    ) {
-      await supabase
-        .from('payments')
-        .update({ status: 'failed' })
-        .eq('paystack_reference', reference)
-        .eq('status', 'pending');
-    }
-
-    // Always return 200 OK quickly to acknowledge Paystack webhook
-    res.status(200).json({ received: true });
-  } catch (err) {
-    console.error('POST /api/webhooks/paystack failed:', err);
-    res.status(200).json({ received: true });
+    console.error('GET /api/payments/status/:reference failed:', err);
+    return res
+      .status(500)
+      .json({ success: false, error: err.message || 'Failed to check payment status.' });
   }
 });
 

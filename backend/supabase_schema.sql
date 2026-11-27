@@ -176,30 +176,34 @@ alter table public.rooms
   add column if not exists location_pin_url text;
 
 -- ============================================================================
--- Step 3 Additions: Paystack Kenya M-PESA STK Push & Host Auto-Transfer Payouts
+-- Step 3 Additions: PayHero Kenya API v2 M-PESA STK Push Payments
 -- ============================================================================
-alter table public.rooms
-  add column if not exists paystack_recipient_code text;
-
 create table if not exists public.payments (
   id uuid primary key default gen_random_uuid(),
-  room_id uuid not null references public.rooms(id) on delete cascade,
-  guest_id uuid references public.guests(id) on delete set null,
-  payer_email text not null,
-  payer_phone text not null,
-  amount_kes numeric not null,
-  paystack_reference text unique not null,
+  event_id text not null,
+  user_id text,
+  amount numeric not null,
+  phone text not null,
+  reference text unique not null,
+  provider text not null default 'payhero',
   status text not null default 'pending'
-    check (status in ('pending', 'success', 'failed')),
-  payout_status text not null default 'pending_payout'
-    check (payout_status in ('pending_payout', 'transferred', 'payout_failed')),
-  payout_recipient_code text,
-  payout_reference text,
+    check (status in ('pending', 'paid', 'failed')),
+  mpesa_receipt text,
   created_at timestamptz not null default now()
 );
 
-create index if not exists idx_payments_room_id on public.payments(room_id);
-create index if not exists idx_payments_reference on public.payments(paystack_reference);
+-- Ensure columns exist if an earlier payments table was already created
+alter table public.payments
+  add column if not exists event_id text,
+  add column if not exists user_id text,
+  add column if not exists amount numeric,
+  add column if not exists phone text,
+  add column if not exists reference text,
+  add column if not exists provider text default 'payhero',
+  add column if not exists mpesa_receipt text;
+
+create index if not exists idx_payments_event_id on public.payments(event_id);
+create index if not exists idx_payments_ref on public.payments(reference);
 
 alter table public.payments enable row level security;
 

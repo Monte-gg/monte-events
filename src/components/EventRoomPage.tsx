@@ -802,20 +802,48 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (user.memberSince === 'Preview Mode') {
-                    onPromptGuestPay?.();
-                    return;
-                  }
-                  setStkPayModalOpen(true);
-                }}
-                className="w-full sm:w-auto shrink-0 inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 px-5 py-3 text-xs sm:text-sm font-extrabold text-white shadow-lg transition active:scale-95"
-              >
-                <Smartphone className="h-4 w-4" />
-                Pay {formatKES(event.costPerPerson)}
-              </button>
+              <div className="w-full sm:w-auto shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (user.memberSince === 'Preview Mode') {
+                      onPromptGuestPay?.();
+                      return;
+                    }
+                    setStkPayModalOpen(true);
+                  }}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 px-5 py-3 text-xs sm:text-sm font-extrabold text-white shadow-lg transition active:scale-95"
+                >
+                  <Smartphone className="h-4 w-4" />
+                  Pay {formatKES(event.costPerPerson)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (user.memberSince === 'Preview Mode') {
+                      onPromptGuestPay?.();
+                      return;
+                    }
+                    const targetGuest: Guest = currentUserGuest || {
+                      id: `g-self-${Date.now()}`,
+                      name: user.name,
+                      phone: user.phone || '',
+                      email: user.email,
+                      initials: user.initials,
+                      avatarColor: '#1A6BFF',
+                      amount: event.costPerPerson,
+                      paid: false,
+                      online: true,
+                    };
+                    setMpesaCodeInput(targetGuest.mpesaCode || '');
+                    setMpesaModalGuest(targetGuest);
+                  }}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-white dark:bg-[#0B1A3A] hover:border-[#1A6BFF] px-4 py-3 text-xs font-extrabold text-[#0A1E5C] dark:text-white transition active:scale-95"
+                >
+                  <CheckCircle2 className="h-4 w-4 text-[#1A6BFF]" />
+                  I&apos;ve Paid (Paste M-PESA Code)
+                </button>
+              </div>
             </div>
           )}
 
@@ -1453,12 +1481,11 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
         />
       )}
 
-      {/* Paystack Kenya M-PESA STK Push Modal */}
+      {/* PayHero Kenya M-PESA STK Push Modal */}
       <MpesaStkPayModal
         open={stkPayModalOpen}
         event={event}
         user={user}
-        guestId={currentUserGuest?.id || null}
         onClose={() => setStkPayModalOpen(false)}
         onPaymentConfirmed={(ref) => {
           onMpesaPaymentConfirmed?.(event.id, ref);
