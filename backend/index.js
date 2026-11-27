@@ -285,7 +285,12 @@ app.post('/api/rooms', async (req, res) => {
       mpesa_number = null,
       mpesa_account = null,
       mpesa_name = null,
+      activities = [],
+      main_guests = [],
+      sub_events = [],
+      location_pin_url = null,
       guests = [],
+      expenses = [],
     } = req.body || {};
 
     if (!name || !date) {
@@ -318,6 +323,10 @@ app.post('/api/rooms', async (req, res) => {
       ...(mpesa_account ? { mpesa_account } : {}),
       ...(mpesa_name ? { mpesa_name } : {}),
       ...(host_email ? { host_email } : {}),
+      ...(Array.isArray(activities) && activities.length > 0 ? { activities } : {}),
+      ...(Array.isArray(main_guests) && main_guests.length > 0 ? { main_guests } : {}),
+      ...(Array.isArray(sub_events) && sub_events.length > 0 ? { sub_events } : {}),
+      ...(location_pin_url ? { location_pin_url } : {}),
     };
 
     let { data: room, error: roomErr } = await supabase
@@ -370,16 +379,73 @@ app.post('/api/rooms', async (req, res) => {
       insertedGuests = gData || [];
     }
 
+    let insertedExpenses = [];
+    if (Array.isArray(expenses) && expenses.length > 0) {
+      const expPayload = expenses.map((ex) => ({
+        room_id: room.id,
+        title: String(ex.title || '').trim(),
+        category: ex.category || 'Other',
+        amount: Number(ex.amount) || 0,
+        paid_by: String(ex.paid_by || ex.paidBy || created_by || 'Host').trim(),
+      })).filter((ex) => ex.title && ex.amount > 0);
+      if (expPayload.length > 0) {
+        const { data: eData } = await supabase
+          .from('expenses')
+          .insert(expPayload)
+          .select();
+        insertedExpenses = eData || [];
+      }
+    }
+
     res.status(201).json({
       room: {
         ...room,
         invite_link: buildInviteLink(room.invite_code),
         guests: insertedGuests,
+        expenses: insertedExpenses,
       },
     });
   } catch (err) {
     console.error('POST /api/rooms failed:', err);
     res.status(500).json({ error: err.message || 'Failed to create room' });
+  }
+});
+
+// PATCH /api/rooms/:id — update room budget, guest limit, location pin, activities, main guests, or sub-events
+app.patch('/api/rooms/:id', async (req, res) => {
+  if (!requireSupabase(res)) return;
+  try {
+    const { id } = req.params;
+    const allowed = [
+      'total_budget',
+      'max_guests',
+      'cost_per_person',
+      'location',
+      'location_pin_url',
+      'activities',
+      'main_guests',
+      'sub_events',
+    ];
+    const updates = {};
+    for (const key of allowed) {
+      if (req.body && req.body[key] !== undefined) {
+        updates[key] = req.body[key];
+      }
+    }
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No valid update fields provided' });
+    }
+    const { data, error } = await supabase
+      .from('rooms')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json({ room: data });
+  } catch (err) {
+    console.error('PATCH /api/rooms/:id failed:', err);
+    res.status(500).json({ error: err.message || 'Failed to update room' });
   }
 });
 

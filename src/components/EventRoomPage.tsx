@@ -2,14 +2,19 @@ import React, { useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Calendar,
+  CalendarPlus,
   Check,
   CheckCircle2,
   Clock,
   Copy,
+  ExternalLink,
   Film,
   Image as ImageIcon,
   MapPin,
   MessageCircle,
+  Mic2,
+  Navigation,
+  Pencil,
   Play,
   Plus,
   Receipt,
@@ -18,6 +23,7 @@ import {
   ShieldCheck,
   Smartphone,
   Sparkles,
+  Tag,
   Trash2,
   UploadCloud,
   UserMinus,
@@ -75,6 +81,14 @@ interface EventRoomPageProps {
     }
   ) => void;
   onDeleteExpense: (eventId: string, expenseId: string) => void;
+  onUpdateRoom?: (
+    eventId: string,
+    updates: {
+      totalBudget?: number;
+      maxGuests?: number;
+      costPerPerson?: number;
+    }
+  ) => void;
   onUploadMedia: (eventId: string, items: MediaItem[]) => void;
   onSendMessage: (
     eventId: string,
@@ -109,6 +123,7 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
   onRemoveGuestFromEvent,
   onAddExpense,
   onDeleteExpense,
+  onUpdateRoom,
   onUploadMedia,
   onSendMessage,
   onToggleReaction,
@@ -135,6 +150,32 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
   const [expCategory, setExpCategory] = useState<ExpenseCategory>('Transport');
   const [expAmount, setExpAmount] = useState('');
   const [expPaidBy, setExpPaidBy] = useState(user.name);
+
+  // Location directions modal & inline budget editor state
+  const [showDirectionsModal, setShowDirectionsModal] = useState(false);
+  const [editingBudget, setEditingBudget] = useState(false);
+  const [editBudgetValue, setEditBudgetValue] = useState(String(event.totalBudget));
+  const [editMaxGuestsValue, setEditMaxGuestsValue] = useState(String(event.maxGuests));
+
+  const mapViewUrl =
+    event.locationPinUrl ||
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`;
+  const mapDirectionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+    event.location
+  )}`;
+
+  const handleSaveBudgetSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    const nextBudget = Math.max(0, Number(editBudgetValue) || 0);
+    const nextMaxGuests = Math.max(1, Number(editMaxGuestsValue) || 1);
+    const nextCostPerPerson = Math.round(nextBudget / nextMaxGuests);
+    onUpdateRoom?.(event.id, {
+      totalBudget: nextBudget,
+      maxGuests: nextMaxGuests,
+      costPerPerson: nextCostPerPerson,
+    });
+    setEditingBudget(false);
+  };
 
   const handleTogglePaidWithFlash = (guest: Guest) => {
     if (!guest.paid) {
@@ -411,13 +452,21 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
                 <Calendar className="h-4 w-4 text-[#D6E6FF]" />
                 {formatDateShort(event.date)}
               </span>
-              <span className="inline-flex items-center gap-1.5">
-                <MapPin className="h-4 w-4 text-[#D6E6FF]" />
-                {event.location}
-              </span>
+              <button
+                type="button"
+                onClick={() => setShowDirectionsModal(true)}
+                className="inline-flex items-center gap-1.5 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm px-3 py-1 transition text-left"
+                title="Click for map pin & turn-by-turn directions"
+              >
+                <MapPin className="h-4 w-4 text-[#D6E6FF] shrink-0" />
+                <span className="underline decoration-white/60 underline-offset-2">
+                  {event.location}
+                </span>
+                <Navigation className="h-3.5 w-3.5 text-[#D6E6FF] shrink-0" />
+              </button>
               <span className="inline-flex items-center gap-1.5">
                 <Users className="h-4 w-4 text-[#D6E6FF]" />
-                {paidGuests.length}/{event.guests.length} Paid
+                {paidGuests.length}/{event.maxGuests.toLocaleString()} Spots
               </span>
             </div>
           </div>
@@ -445,7 +494,7 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] border border-white/25 px-4 py-2.5 text-xs sm:text-sm font-extrabold text-white shadow-lg transition active:scale-95"
               >
                 <Sparkles className="h-4 w-4" />
-                Event Flyer
+                View / Download Flyer
               </button>
             )}
             <button
@@ -477,6 +526,150 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Location & Directions Modal */}
+      {showDirectionsModal && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-[#0A1430]/75 backdrop-blur-sm p-4"
+          onClick={() => setShowDirectionsModal(false)}
+        >
+          <div
+            className="animate-slide-up w-full max-w-md rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-white dark:bg-[#13224A] p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#1A6BFF]/15 text-[#1A6BFF] dark:text-[#2B7FFF]">
+                  <MapPin className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-base font-extrabold text-[#0A1E5C] dark:text-white">
+                    Event Location &amp; Directions
+                  </h2>
+                  <p className="text-xs text-[#0A1E5C]/65 dark:text-white/65">
+                    {event.location}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDirectionsModal(false)}
+                className="rounded-full p-1.5 text-[#0A1E5C]/60 dark:text-white/60 hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2.5">
+              <a
+                href={mapDirectionsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-4 py-3 text-sm font-extrabold text-white shadow-monte transition"
+              >
+                <Navigation className="h-4 w-4" />
+                Get Turn-by-Turn Directions
+              </a>
+              <a
+                href={mapViewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-[#F0F6FF] dark:bg-[#0B1A3A] px-4 py-3 text-sm font-extrabold text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF] transition"
+              >
+                <ExternalLink className="h-4 w-4 text-[#1A6BFF]" />
+                View Pinned Location on Maps
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  if (navigator.clipboard) {
+                    navigator.clipboard.writeText(event.location).catch(() => {});
+                  }
+                  onShowToast('Location copied!');
+                }}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 px-4 py-2.5 text-xs font-bold text-[#0A1E5C]/80 dark:text-white/80 hover:bg-[#F0F6FF] dark:hover:bg-[#0B1A3A] transition"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                Copy Location Address
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Highlights Strip: Main Guests, Activities & Multi-Event Lineup */}
+      {((event.mainGuests && event.mainGuests.length > 0) ||
+        (event.activities && event.activities.length > 0) ||
+        (event.subEvents && event.subEvents.length > 0)) && (
+        <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-4 sm:p-5 space-y-4">
+          {event.mainGuests && event.mainGuests.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-[#1A6BFF] dark:text-[#2B7FFF] inline-flex items-center gap-1.5">
+                <Mic2 className="h-3.5 w-3.5" />
+                Main Guests &amp; Headliners
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {event.mainGuests.map((mg) => (
+                  <span
+                    key={mg.id}
+                    className="inline-flex items-center gap-2 rounded-full border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-[#F0F6FF] dark:bg-[#0B1A3A] px-3.5 py-1.5 text-xs font-extrabold text-[#0A1E5C] dark:text-white"
+                  >
+                    {mg.name}
+                    <span className="rounded-full bg-[#1A6BFF] px-2 py-0.5 text-[10px] font-extrabold text-white">
+                      {mg.role}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {event.activities && event.activities.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-[#1A6BFF] dark:text-[#2B7FFF] inline-flex items-center gap-1.5">
+                <Tag className="h-3.5 w-3.5" />
+                Planned Activities
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {event.activities.map((act) => (
+                  <span
+                    key={act}
+                    className="rounded-full border border-[#1A6BFF]/35 bg-[#1A6BFF]/10 dark:bg-[#1A6BFF]/20 px-3 py-1 text-xs font-bold text-[#1A6BFF] dark:text-blue-200"
+                  >
+                    {act}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {event.subEvents && event.subEvents.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-[#1A6BFF] dark:text-[#2B7FFF] inline-flex items-center gap-1.5">
+                <CalendarPlus className="h-3.5 w-3.5" />
+                Events in This Room ({event.subEvents.length})
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {event.subEvents.map((se) => (
+                  <div
+                    key={se.id}
+                    className="rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#F0F6FF]/70 dark:bg-[#0B1A3A] px-3.5 py-2.5"
+                  >
+                    <p className="text-xs sm:text-sm font-extrabold text-[#0A1E5C] dark:text-white">
+                      {se.title}
+                    </p>
+                    <p className="text-[11px] text-[#0A1E5C]/65 dark:text-white/65 mt-0.5">
+                      {formatDateShort(se.date)}
+                      {se.time ? ` • ${se.time}` : ''}
+                      {se.location ? ` • ${se.location}` : ''}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Room Tabs: Guests | Budget | Media | Chat with gliding active pill */}
       <div className="grid grid-cols-4 gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-1.5">
@@ -1009,43 +1202,108 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
             )}
           </div>
 
-          <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-5 sm:p-6 space-y-5">
-            <div>
-              <h3 className="text-base font-extrabold text-[#0A1E5C] dark:text-white">
-                Planned Budget Allocation ({formatKES(event.totalBudget)})
-              </h3>
-              <p className="text-xs text-[#0A1E5C]/60 dark:text-white/60">
-                Target split across Transport, Food, Venue, DJ, and Misc.
-              </p>
+          <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-5 sm:p-6 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-extrabold text-[#0A1E5C] dark:text-white">
+                  Room Budget &amp; Guest Capacity
+                </h3>
+                <p className="text-xs text-[#0A1E5C]/60 dark:text-white/60">
+                  Target Budget: <strong>{formatKES(event.totalBudget)}</strong> · Max Guests:{' '}
+                  <strong>{event.maxGuests.toLocaleString()}</strong> ·{' '}
+                  <strong>{formatKES(event.costPerPerson)}/person</strong>
+                </p>
+              </div>
+              {isHost && onUpdateRoom && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditBudgetValue(String(event.totalBudget));
+                    setEditMaxGuestsValue(String(event.maxGuests));
+                    setEditingBudget((v) => !v);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-[#F0F6FF] dark:bg-[#0B1A3A] hover:border-[#1A6BFF] px-3.5 py-2 text-xs font-extrabold text-[#0A1E5C] dark:text-white transition"
+                >
+                  <Pencil className="h-3.5 w-3.5 text-[#1A6BFF]" />
+                  {editingBudget ? 'Cancel' : 'Edit Budget & Guests'}
+                </button>
+              )}
             </div>
 
-            <div className="space-y-4">
-              {budgetEntries.map(([category, amount]) => {
-                const pct =
-                  event.totalBudget > 0
-                    ? Math.round((amount / event.totalBudget) * 100)
-                    : 0;
-                return (
-                  <div key={category} className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs sm:text-sm font-bold">
-                      <span className="text-[#0A1E5C] dark:text-white">{category}</span>
-                      <span className="text-[#1A6BFF] dark:text-[#2B7FFF]">
-                        {formatKES(amount)}{' '}
-                        <span className="text-[#0A1E5C]/50 dark:text-white/50 font-semibold">
-                          ({pct}%)
-                        </span>
-                      </span>
-                    </div>
-                    <div className="h-3 w-full rounded-full bg-[#F0F6FF] dark:bg-[#0A1430] overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-[#0B2E8F] via-[#1A6BFF] to-[#2B7FFF] transition-all duration-500"
-                        style={{ width: `${Math.min(100, pct)}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            {editingBudget && (
+              <form
+                onSubmit={handleSaveBudgetSettings}
+                className="rounded-2xl border border-[#1A6BFF]/35 bg-[#F0F6FF]/70 dark:bg-[#0B1A3A] p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 animate-slide-up"
+              >
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-[#0A1E5C]/70 dark:text-white/70 mb-1">
+                    Total Budget (KES)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    required
+                    value={editBudgetValue}
+                    onChange={(e) => setEditBudgetValue(e.target.value)}
+                    className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-sm font-bold text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-[#0A1E5C]/70 dark:text-white/70 mb-1">
+                    Max Guests (up to 1,000,000+)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10000000}
+                    required
+                    value={editMaxGuestsValue}
+                    onChange={(e) => setEditMaxGuestsValue(e.target.value)}
+                    className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-sm font-bold text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    type="submit"
+                    className="w-full rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-4 py-2.5 text-xs sm:text-sm font-extrabold text-white shadow-sm transition"
+                  >
+                    Save Budget Changes
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {budgetEntries.some(([, amount]) => amount > 0) && (
+              <div className="space-y-3 pt-1">
+                {budgetEntries
+                  .filter(([, amount]) => amount > 0)
+                  .map(([category, amount]) => {
+                    const pct =
+                      event.totalBudget > 0
+                        ? Math.round((amount / event.totalBudget) * 100)
+                        : 0;
+                    return (
+                      <div key={category} className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs sm:text-sm font-bold">
+                          <span className="text-[#0A1E5C] dark:text-white">{category}</span>
+                          <span className="text-[#1A6BFF] dark:text-[#2B7FFF]">
+                            {formatKES(amount)}{' '}
+                            <span className="text-[#0A1E5C]/50 dark:text-white/50 font-semibold">
+                              ({pct}%)
+                            </span>
+                          </span>
+                        </div>
+                        <div className="h-2.5 w-full rounded-full bg-[#F0F6FF] dark:bg-[#0A1430] overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-[#0B2E8F] via-[#1A6BFF] to-[#2B7FFF] transition-all duration-500"
+                            style={{ width: `${Math.min(100, pct)}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
           </div>
         </div>
       )}

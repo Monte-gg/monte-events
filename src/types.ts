@@ -42,6 +42,20 @@ export interface ExpenseItem {
   createdAt?: string;
 }
 
+export interface MainGuest {
+  id: string;
+  name: string;
+  role: string; // e.g. Headliner, Artist, Keynote Speaker, VIP, MC, Leader
+}
+
+export interface SubEvent {
+  id: string;
+  title: string;
+  date: string;
+  time?: string;
+  location?: string;
+}
+
 export interface PublicInvitePreview {
   id: string;
   name: string;
@@ -151,6 +165,10 @@ export interface MonteEvent {
   mpesaAccount?: string;
   mpesaName?: string;
   expenses?: ExpenseItem[];
+  activities?: string[];
+  mainGuests?: MainGuest[];
+  subEvents?: SubEvent[];
+  locationPinUrl?: string;
 }
 
 export interface UserProfile {

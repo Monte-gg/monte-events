@@ -1,15 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import QRCode from 'qrcode';
 import {
   Calendar,
+  CalendarPlus,
   Check,
   Copy,
   Download,
   Loader2,
   MapPin,
+  Mic2,
+  Moon,
   Share2,
   ShieldCheck,
-  Smartphone,
   Sparkles,
+  Sun,
   Users,
   Wallet,
   X,
@@ -17,7 +21,6 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import { MonteEvent } from '../types';
 import { formatDateShort, formatKES } from '../data/sampleData';
-import { ThemeToggle } from './ThemeToggle';
 import { EASE_SKIPER } from './MotionPrimitives';
 
 interface EventFlyerModalProps {
@@ -26,18 +29,7 @@ interface EventFlyerModalProps {
   onShowToast: (msg: string, type?: 'success' | 'info') => void;
 }
 
-function getMpesaLabel(type?: MonteEvent['mpesaType']): string {
-  switch (type) {
-    case 'till':
-      return 'M-PESA Buy Goods Till';
-    case 'paybill':
-      return 'M-PESA Paybill';
-    case 'pochi':
-      return 'Pochi la Biashara';
-    default:
-      return 'M-PESA Send Money';
-  }
-}
+type FlyerStyle = 'midnight' | 'light';
 
 function drawRoundedRect(
   ctx: CanvasRenderingContext2D,
@@ -100,7 +92,11 @@ function loadImageForCanvas(src: string): Promise<HTMLImageElement | null> {
   });
 }
 
-async function generateFlyerPng(event: MonteEvent): Promise<Blob | null> {
+async function generateFlyerPng(
+  event: MonteEvent,
+  style: FlyerStyle,
+  qrDataUrl: string
+): Promise<Blob | null> {
   const W = 1080;
   const H = 1350;
   const canvas = document.createElement('canvas');
@@ -109,231 +105,303 @@ async function generateFlyerPng(event: MonteEvent): Promise<Blob | null> {
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
 
-  // Base midnight-navy & royal-blue gradient
-  const baseGrad = ctx.createLinearGradient(0, 0, W, H);
-  baseGrad.addColorStop(0, '#0B2E8F');
-  baseGrad.addColorStop(0.5, '#1A6BFF');
-  baseGrad.addColorStop(1, '#0A1430');
-  ctx.fillStyle = baseGrad;
+  const isDark = style === 'midnight';
+  const bgColor = isDark ? '#081128' : '#F4F8FF';
+  const primaryBlue = '#2563EB';
+  const textMain = isDark ? '#FFFFFF' : '#081128';
+  const textMuted = isDark ? '#93C5FD' : '#1E40AF';
+  const cardBg = isDark ? 'rgba(15, 29, 64, 0.86)' : 'rgba(255, 255, 255, 0.94)';
+  const cardBorder = isDark ? 'rgba(37, 99, 235, 0.42)' : 'rgba(37, 99, 235, 0.28)';
+
+  // 1. Base Background
+  ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, W, H);
 
-  // Draw cover photo (cover-fit) if CORS allows
-  const img = await loadImageForCanvas(event.coverImage);
-  if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
-    const imgRatio = img.naturalWidth / img.naturalHeight;
-    const canvasRatio = W / H;
+  // 2. Top Half Cover Photo (520px tall) with gradient fade into background
+  const heroH = 540;
+  const heroGrad = ctx.createLinearGradient(0, 0, W, heroH);
+  heroGrad.addColorStop(0, '#0B2E8F');
+  heroGrad.addColorStop(1, '#2563EB');
+  ctx.fillStyle = heroGrad;
+  ctx.fillRect(0, 0, W, heroH);
+
+  const coverImg = await loadImageForCanvas(event.coverImage);
+  if (coverImg && coverImg.naturalWidth > 0 && coverImg.naturalHeight > 0) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, W, heroH);
+    ctx.clip();
+
+    const imgRatio = coverImg.naturalWidth / coverImg.naturalHeight;
+    const boxRatio = W / heroH;
     let drawW = W;
-    let drawH = H;
+    let drawH = heroH;
     let offsetX = 0;
     let offsetY = 0;
-
-    if (imgRatio > canvasRatio) {
-      drawH = H;
-      drawW = H * imgRatio;
+    if (imgRatio > boxRatio) {
+      drawH = heroH;
+      drawW = heroH * imgRatio;
       offsetX = -(drawW - W) / 2;
     } else {
       drawW = W;
       drawH = W / imgRatio;
-      offsetY = -(drawH - H) / 2;
+      offsetY = -(drawH - heroH) / 2;
     }
-    ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
+    ctx.drawImage(coverImg, offsetX, offsetY, drawW, drawH);
+    ctx.restore();
   }
 
-  // Dramatic royal-blue / midnight-navy gradient overlay for clean legibility
-  const scrim = ctx.createLinearGradient(0, 0, 0, H);
-  scrim.addColorStop(0, 'rgba(10, 20, 48, 0.72)');
-  scrim.addColorStop(0.35, 'rgba(11, 46, 143, 0.32)');
-  scrim.addColorStop(0.62, 'rgba(10, 20, 48, 0.84)');
-  scrim.addColorStop(1, 'rgba(10, 20, 48, 0.97)');
-  ctx.fillStyle = scrim;
-  ctx.fillRect(0, 0, W, H);
+  // Smooth fade from cover photo into #081128 (or #F4F8FF)
+  const topFade = ctx.createLinearGradient(0, 0, 0, heroH);
+  topFade.addColorStop(0, 'rgba(8, 17, 40, 0.62)');
+  topFade.addColorStop(0.45, 'rgba(8, 17, 40, 0.18)');
+  topFade.addColorStop(0.8, isDark ? 'rgba(8, 17, 40, 0.85)' : 'rgba(244, 248, 255, 0.82)');
+  topFade.addColorStop(1, bgColor);
+  ctx.fillStyle = topFade;
+  ctx.fillRect(0, 0, W, heroH + 4);
 
-  // Subtle decorative royal-blue top glow
-  const glow = ctx.createRadialGradient(W * 0.85, H * 0.12, 20, W * 0.85, H * 0.12, 420);
-  glow.addColorStop(0, 'rgba(43, 127, 255, 0.42)');
-  glow.addColorStop(1, 'rgba(43, 127, 255, 0)');
+  // Subtle electric-blue radial ambient glow
+  const glow = ctx.createRadialGradient(W * 0.85, 620, 20, W * 0.85, 620, 440);
+  glow.addColorStop(0, isDark ? 'rgba(37, 99, 235, 0.25)' : 'rgba(37, 99, 235, 0.12)');
+  glow.addColorStop(1, 'rgba(37, 99, 235, 0)');
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
 
-  // Outer crisp frame border
-  ctx.strokeStyle = 'rgba(214, 230, 255, 0.22)';
-  ctx.lineWidth = 3;
-  drawRoundedRect(ctx, 36, 36, W - 72, H - 72, 40);
-  ctx.stroke();
+  const padX = 68;
 
-  // Top Header: MONTE EVENTS Emblem + Event Type Pill
-  const padX = 80;
-  // M Circle Emblem
-  ctx.fillStyle = '#1A6BFF';
+  // 3. Top-Left Circular Orbital "M" + MONTE EVENTS Badge
+  const cx = padX + 38;
+  const cy = 96;
+  // Orbital rings
+  ctx.save();
+  ctx.strokeStyle = 'rgba(147, 197, 253, 0.65)';
+  ctx.lineWidth = 2.5;
   ctx.beginPath();
-  ctx.arc(padX + 34, 114, 34, 0, Math.PI * 2);
+  ctx.ellipse(cx, cy, 46, 20, -0.45, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // Inner circle
+  ctx.fillStyle = primaryBlue;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 32, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.lineWidth = 2.5;
   ctx.stroke();
 
   ctx.fillStyle = '#FFFFFF';
-  ctx.font = '900 36px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.font = '900 34px system-ui, -apple-system, Segoe UI, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('M', padX + 34, 116);
+  ctx.fillText('M', cx, cy + 2);
 
   ctx.textAlign = 'left';
-  ctx.font = '900 28px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.font = '900 26px system-ui, -apple-system, Segoe UI, sans-serif';
   ctx.fillStyle = '#FFFFFF';
-  ctx.fillText('MONTE EVENTS', padX + 86, 106);
+  ctx.fillText('MONTE EVENTS', cx + 52, cy - 10);
+  ctx.font = '700 15px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.fillStyle = '#BFDBFE';
+  ctx.fillText('OFFICIAL EVENT FLYER', cx + 52, cy + 16);
 
-  ctx.font = '600 17px system-ui, -apple-system, Segoe UI, sans-serif';
-  ctx.fillStyle = '#D6E6FF';
-  ctx.fillText('OFFICIAL EVENT FLYER', padX + 86, 134);
-
-  // Event Type Pill on Top Right
-  const typeLabel = (event.customType || event.type).toUpperCase();
-  ctx.font = '800 20px system-ui, -apple-system, Segoe UI, sans-serif';
-  const typeWidth = ctx.measureText(typeLabel).width + 48;
-  ctx.fillStyle = '#1A6BFF';
-  drawRoundedRect(ctx, W - padX - typeWidth, 88, typeWidth, 52, 26);
+  // 4. Top-Right Electric-Blue Category Pill
+  const catLabel = (event.customType || event.type).toUpperCase();
+  ctx.font = '900 20px system-ui, -apple-system, Segoe UI, sans-serif';
+  const catW = ctx.measureText(catLabel).width + 48;
+  ctx.fillStyle = primaryBlue;
+  drawRoundedRect(ctx, W - padX - catW, 70, catW, 50, 25);
   ctx.fill();
   ctx.fillStyle = '#FFFFFF';
   ctx.textAlign = 'center';
-  ctx.fillText(typeLabel, W - padX - typeWidth / 2, 115);
+  ctx.fillText(catLabel, W - padX - catW / 2, 96);
 
-  // Middle/Lower Main Typography
+  // 5. Bold Uppercase Event Title + Hosted By
   ctx.textAlign = 'left';
-  let cursorY = 580;
-
-  // Eyebrow pill
-  const eyebrow = "YOU'RE INVITED";
-  ctx.font = '800 20px system-ui, -apple-system, Segoe UI, sans-serif';
-  const eyebrowW = ctx.measureText(eyebrow).width + 40;
-  ctx.fillStyle = 'rgba(26, 107, 255, 0.35)';
-  drawRoundedRect(ctx, padX, cursorY, eyebrowW, 44, 22);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(214, 230, 255, 0.45)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  ctx.fillStyle = '#D6E6FF';
-  ctx.fillText(eyebrow, padX + 20, cursorY + 23);
-
-  cursorY += 72;
-
-  // Event Name (up to 2 lines)
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = '900 68px system-ui, -apple-system, Segoe UI, sans-serif';
-  const titleLines = wrapCanvasText(ctx, event.name, W - padX * 2, 2);
+  let y = 455;
+  ctx.fillStyle = textMain;
+  ctx.font = '900 60px system-ui, -apple-system, Segoe UI, sans-serif';
+  const titleLines = wrapCanvasText(ctx, event.name.toUpperCase(), W - padX * 2, 2);
   for (const line of titleLines) {
-    ctx.fillText(line, padX, cursorY + 34);
-    cursorY += 80;
+    ctx.fillText(line, padX, y);
+    y += 68;
   }
 
-  // Hosted By
-  cursorY += 10;
-  ctx.fillStyle = '#93C5FD';
-  ctx.font = '700 26px system-ui, -apple-system, Segoe UI, sans-serif';
-  ctx.fillText(`Hosted by ${event.createdBy}`, padX, cursorY + 14);
-  cursorY += 54;
+  ctx.fillStyle = textMuted;
+  ctx.font = '700 23px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.fillText(`HOSTED BY ${event.createdBy.toUpperCase()}`, padX, y + 6);
+  y += 46;
 
-  // Description (up to 2 lines)
-  if (event.description) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.82)';
-    ctx.font = '500 23px system-ui, -apple-system, Segoe UI, sans-serif';
-    const descLines = wrapCanvasText(ctx, event.description, W - padX * 2, 2);
-    for (const line of descLines) {
-      ctx.fillText(line, padX, cursorY + 12);
-      cursorY += 34;
-    }
-    cursorY += 18;
-  }
+  // 6. 2x2 Glassmorphic Detail Grid
+  const gap = 18;
+  const boxW = (W - padX * 2 - gap) / 2;
+  const boxH = 92;
+  const spotsText = event.mpesaNumber
+    ? `${event.maxGuests.toLocaleString()} Spots • M-PESA Ready`
+    : `${event.maxGuests.toLocaleString()} Spots Available`;
 
-  // 2x2 Detail Cards Grid
-  const cardGap = 20;
-  const cardW = (W - padX * 2 - cardGap) / 2;
-  const cardH = 104;
-  const details = [
+  const gridItems = [
     { label: 'DATE', value: formatDateShort(event.date) },
     { label: 'LOCATION', value: event.location },
-    { label: 'CONTRIBUTION', value: `${formatKES(event.costPerPerson)} / person` },
-    { label: 'CAPACITY', value: `${event.maxGuests} Guests Max` },
+    { label: 'KES / PERSON', value: formatKES(event.costPerPerson) },
+    { label: 'CAPACITY & PAY', value: spotsText },
   ];
 
-  details.forEach((item, i) => {
+  gridItems.forEach((item, i) => {
     const col = i % 2;
     const row = Math.floor(i / 2);
-    const x = padX + col * (cardW + cardGap);
-    const y = cursorY + row * (cardH + cardGap);
+    const bx = padX + col * (boxW + gap);
+    const by = y + row * (boxH + gap);
 
-    ctx.fillStyle = 'rgba(19, 34, 74, 0.85)';
-    drawRoundedRect(ctx, x, y, cardW, cardH, 24);
+    ctx.fillStyle = cardBg;
+    drawRoundedRect(ctx, bx, by, boxW, boxH, 22);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(43, 127, 255, 0.35)';
+    ctx.strokeStyle = cardBorder;
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    ctx.fillStyle = '#93C5FD';
-    ctx.font = '800 17px system-ui, -apple-system, Segoe UI, sans-serif';
-    ctx.fillText(item.label, x + 26, y + 34);
+    // Small blue dot/icon accent
+    ctx.fillStyle = primaryBlue;
+    ctx.beginPath();
+    ctx.arc(bx + 26, by + 28, 6, 0, Math.PI * 2);
+    ctx.fill();
 
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = '800 26px system-ui, -apple-system, Segoe UI, sans-serif';
-    const valLine = wrapCanvasText(ctx, item.value, cardW - 52, 1)[0] || item.value;
-    ctx.fillText(valLine, x + 26, y + 72);
+    ctx.fillStyle = textMuted;
+    ctx.font = '800 15px system-ui, -apple-system, Segoe UI, sans-serif';
+    ctx.fillText(item.label, bx + 42, by + 29);
+
+    ctx.fillStyle = textMain;
+    ctx.font = '800 24px system-ui, -apple-system, Segoe UI, sans-serif';
+    const val = wrapCanvasText(ctx, item.value, boxW - 44, 1)[0] || item.value;
+    ctx.fillText(val, bx + 22, by + 65);
   });
 
-  cursorY += cardH * 2 + cardGap + 24;
+  y += boxH * 2 + gap + 26;
 
-  // Optional M-PESA Strip
-  if (event.mpesaNumber) {
-    ctx.fillStyle = 'rgba(16, 185, 129, 0.16)';
-    drawRoundedRect(ctx, padX, cursorY, W - padX * 2, 86, 22);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(52, 211, 153, 0.45)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+  // 7. MAIN GUESTS / HEADLINERS (if any)
+  const mainGuests = event.mainGuests || [];
+  if (mainGuests.length > 0) {
+    ctx.fillStyle = textMuted;
+    ctx.font = '900 16px system-ui, -apple-system, Segoe UI, sans-serif';
+    ctx.fillText('FEATURING / MAIN GUESTS', padX, y);
+    y += 18;
 
-    ctx.fillStyle = '#6EE7B7';
-    ctx.font = '800 17px system-ui, -apple-system, Segoe UI, sans-serif';
-    ctx.fillText(getMpesaLabel(event.mpesaType).toUpperCase(), padX + 26, cursorY + 30);
+    let px = padX;
+    for (const mg of mainGuests.slice(0, 4)) {
+      const label = `${mg.name} (${mg.role})`;
+      ctx.font = '800 19px system-ui, -apple-system, Segoe UI, sans-serif';
+      const pillW = Math.min(ctx.measureText(label).width + 34, W - padX * 2);
+      if (px + pillW > W - padX) {
+        px = padX;
+        y += 46;
+      }
+      ctx.fillStyle = isDark ? 'rgba(37, 99, 235, 0.25)' : 'rgba(37, 99, 235, 0.12)';
+      drawRoundedRect(ctx, px, y, pillW, 38, 19);
+      ctx.fill();
+      ctx.strokeStyle = primaryBlue;
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
 
-    const mpesaDetails = [
-      event.mpesaNumber,
-      event.mpesaAccount ? `Acc: ${event.mpesaAccount}` : '',
-      event.mpesaName ? `(${event.mpesaName})` : '',
-    ]
-      .filter(Boolean)
-      .join('  •  ');
-
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = '800 24px system-ui, -apple-system, Segoe UI, sans-serif';
-    const mpesaLine =
-      wrapCanvasText(ctx, mpesaDetails, W - padX * 2 - 52, 1)[0] || mpesaDetails;
-    ctx.fillText(mpesaLine, padX + 26, cursorY + 62);
+      ctx.fillStyle = textMain;
+      ctx.fillText(label, px + 17, y + 20);
+      px += pillW + 12;
+    }
+    y += 58;
   }
 
-  // Bottom Footer Bar
-  const footerY = H - 118;
-  ctx.strokeStyle = 'rgba(214, 230, 255, 0.2)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(padX, footerY - 18);
-  ctx.lineTo(W - padX, footerY - 18);
+  // 8. ACTIVITIES (Glowing Blue-Bordered Glassmorphic Pills — hidden if empty)
+  const activities = event.activities || [];
+  if (activities.length > 0) {
+    ctx.fillStyle = textMuted;
+    ctx.font = '900 16px system-ui, -apple-system, Segoe UI, sans-serif';
+    ctx.fillText('ACTIVITIES', padX, y);
+    y += 18;
+
+    let px = padX;
+    for (const act of activities.slice(0, 6)) {
+      ctx.font = '800 19px system-ui, -apple-system, Segoe UI, sans-serif';
+      const pillW = ctx.measureText(act).width + 36;
+      if (px + pillW > W - padX) {
+        px = padX;
+        y += 48;
+      }
+      ctx.fillStyle = isDark ? 'rgba(15, 29, 64, 0.9)' : '#FFFFFF';
+      drawRoundedRect(ctx, px, y, pillW, 40, 20);
+      ctx.fill();
+      ctx.strokeStyle = primaryBlue;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = isDark ? '#DBEAFE' : '#1D4ED8';
+      ctx.fillText(act, px + 18, y + 21);
+      px += pillW + 12;
+    }
+    y += 58;
+  }
+
+  // 9. MULTI-EVENT SCHEDULE (if 2+ events added to room)
+  const subEvents = event.subEvents || [];
+  if (subEvents.length > 0 && y < 1030) {
+    ctx.fillStyle = textMuted;
+    ctx.font = '900 16px system-ui, -apple-system, Segoe UI, sans-serif';
+    ctx.fillText('EVENT LINEUP IN THIS ROOM', padX, y);
+    y += 24;
+    for (const se of subEvents.slice(0, 2)) {
+      const line = `• ${se.title} (${formatDateShort(se.date)}${se.time ? ` • ${se.time}` : ''})`;
+      ctx.fillStyle = textMain;
+      ctx.font = '700 19px system-ui, -apple-system, Segoe UI, sans-serif';
+      const clipped = wrapCanvasText(ctx, line, W - padX * 2, 1)[0] || line;
+      ctx.fillText(clipped, padX, y);
+      y += 28;
+    }
+  }
+
+  // 10. Bottom Dark-Blue QR Card (fixed cleanly at bottom)
+  const qrCardH = 210;
+  const qrCardY = H - qrCardH - 48;
+  ctx.fillStyle = isDark ? '#0D1C42' : '#081128';
+  drawRoundedRect(ctx, padX, qrCardY, W - padX * 2, qrCardH, 28);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(37, 99, 235, 0.6)';
+  ctx.lineWidth = 2.5;
   ctx.stroke();
 
-  ctx.fillStyle = '#D6E6FF';
-  ctx.font = '700 20px system-ui, -apple-system, Segoe UI, sans-serif';
-  ctx.fillText(`Join Code: ${event.inviteCode}`, padX, footerY + 14);
+  // QR Code Image on Left
+  const qrBoxSize = 162;
+  const qrX = padX + 24;
+  const qrY = qrCardY + (qrCardH - qrBoxSize) / 2;
+  ctx.fillStyle = '#FFFFFF';
+  drawRoundedRect(ctx, qrX, qrY, qrBoxSize, qrBoxSize, 18);
+  ctx.fill();
 
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-  ctx.font = '600 18px system-ui, -apple-system, Segoe UI, sans-serif';
-  ctx.fillText(
-    `monte-gg.github.io/monte-events/?join=${event.inviteCode}`,
-    padX,
-    footerY + 46
-  );
+  const qrImg = await loadImageForCanvas(qrDataUrl);
+  if (qrImg) {
+    ctx.drawImage(qrImg, qrX + 8, qrY + 8, qrBoxSize - 16, qrBoxSize - 16);
+  }
 
-  ctx.textAlign = 'right';
+  // Right side of QR card
+  const infoX = qrX + qrBoxSize + 34;
+  ctx.textAlign = 'left';
   ctx.fillStyle = '#93C5FD';
-  ctx.font = '800 20px system-ui, -apple-system, Segoe UI, sans-serif';
-  ctx.fillText('Plan it. Invite them. Monte it.', W - padX, footerY + 30);
+  ctx.font = '800 17px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.fillText('SCAN TO JOIN & RSVP INSTANTLY', infoX, qrCardY + 46);
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = '900 32px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.fillText(`JOIN ROOM: ${event.inviteCode}`, infoX, qrCardY + 88);
+
+  // Electric-blue RSVP & PAY VIA MONTE pill
+  const rsvpText = 'RSVP & PAY VIA MONTE';
+  ctx.font = '900 18px system-ui, -apple-system, Segoe UI, sans-serif';
+  const rsvpW = ctx.measureText(rsvpText).width + 38;
+  ctx.fillStyle = primaryBlue;
+  drawRoundedRect(ctx, infoX, qrCardY + 112, rsvpW, 40, 20);
+  ctx.fill();
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillText(rsvpText, infoX + 19, qrCardY + 133);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.font = '600 18px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.fillText('monte-gg.github.io/monte-events', infoX, qrCardY + 178);
 
   return new Promise((resolve) => {
     try {
@@ -349,8 +417,42 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
   onClose,
   onShowToast,
 }) => {
+  const [flyerStyle, setFlyerStyle] = useState<FlyerStyle>('midnight');
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [downloading, setDownloading] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+
+  const inviteUrl = useMemo(
+    () =>
+      event
+        ? `https://monte-gg.github.io/monte-events/?join=${event.inviteCode}`
+        : '',
+    [event]
+  );
+
+  // Generate real scannable QR code whenever event changes
+  useEffect(() => {
+    if (!inviteUrl) return;
+    let active = true;
+    QRCode.toDataURL(inviteUrl, {
+      width: 320,
+      margin: 1,
+      color: {
+        dark: '#081128',
+        light: '#FFFFFF',
+      },
+    })
+      .then((url) => {
+        if (active) setQrDataUrl(url);
+      })
+      .catch(() => {
+        if (active) setQrDataUrl('');
+      });
+    return () => {
+      active = false;
+    };
+  }, [inviteUrl]);
 
   useEffect(() => {
     if (!event) return;
@@ -363,10 +465,9 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
 
   if (!event) return null;
 
-  const inviteUrl = `https://monte-gg.github.io/monte-events/?join=${event.inviteCode}`;
-  const whatsappShareUrl = `https://wa.me/?text=${encodeURIComponent(
-    `🎉 You're invited to ${event.name}!\n📅 ${formatDateShort(event.date)}\n📍 ${event.location}\n💸 ${formatKES(event.costPerPerson)} per person\n👤 Hosted by ${event.createdBy}\n\nJoin on MONTE EVENTS: ${inviteUrl}`
-  )}`;
+  const isDark = flyerStyle === 'midnight';
+  const whatsappText = `🎉 You're invited to ${event.name}!\n📅 ${formatDateShort(event.date)}\n📍 ${event.location}\n💸 ${formatKES(event.costPerPerson)} / person\n👤 Hosted by ${event.createdBy}\n\nJoin Room (${event.inviteCode}) on MONTE EVENTS: ${inviteUrl}`;
+  const whatsappShareUrl = `https://wa.me/?text=${encodeURIComponent(whatsappText)}`;
 
   const handleCopyInvite = () => {
     if (navigator.clipboard) {
@@ -377,31 +478,65 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  const getFilename = () => {
+    const slug = event.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+    return `${slug || 'monte-event'}-flyer.png`;
+  };
+
   const handleDownloadFlyer = async () => {
     if (downloading) return;
     setDownloading(true);
     try {
-      const blob = await generateFlyerPng(event);
+      const blob = await generateFlyerPng(event, flyerStyle, qrDataUrl);
       if (!blob) {
         onShowToast('Could not generate flyer image. Try again.', 'info');
         return;
       }
-      const slug = event.name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '');
-      const filename = `${slug || 'monte-event'}-flyer.png`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = filename;
+      a.download = getFilename();
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1500);
-      onShowToast('Event flyer downloaded as PNG!');
+      onShowToast('1080×1350 PNG Event Flyer downloaded!');
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const handleShareWhatsApp = async () => {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      // Try native Web Share API with PNG file on mobile devices first
+      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        const blob = await generateFlyerPng(event, flyerStyle, qrDataUrl);
+        if (blob) {
+          const file = new File([blob], getFilename(), { type: 'image/png' });
+          const canShareFiles =
+            typeof navigator.canShare === 'function' &&
+            navigator.canShare({ files: [file] });
+          if (canShareFiles) {
+            await navigator.share({
+              title: event.name,
+              text: whatsappText,
+              files: [file],
+            });
+            return;
+          }
+        }
+      }
+      // Desktop / unsupported browser fallback: open WhatsApp with text + join link
+      window.open(whatsappShareUrl, '_blank', 'noopener,noreferrer');
+    } catch {
+      // User cancelled native share or fallback needed
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -413,7 +548,7 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
-        className="fixed inset-0 z-[95] flex items-center justify-center bg-[#0A1430]/80 backdrop-blur-md p-3 sm:p-5 overflow-y-auto"
+        className="fixed inset-0 z-[95] flex items-center justify-center bg-[#081128]/85 backdrop-blur-md p-3 sm:p-5 overflow-y-auto"
         onClick={onClose}
       >
         <motion.div
@@ -421,170 +556,302 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.94, y: 18 }}
           transition={{ duration: 0.28, ease: EASE_SKIPER }}
-          className="relative w-full max-w-4xl rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#0B1A3A] shadow-2xl overflow-hidden my-auto"
+          className="relative w-full max-w-4xl rounded-3xl border border-[#D6E6FF] dark:border-[#2563EB]/35 bg-white dark:bg-[#081128] shadow-2xl overflow-hidden my-auto"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Modal Top Header */}
-          <div className="flex items-center justify-between gap-3 border-b border-[#D6E6FF] dark:border-[#2B7FFF]/20 px-5 py-3.5 bg-[#F0F6FF]/80 dark:bg-[#13224A]">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between gap-3 border-b border-[#D6E6FF] dark:border-[#2563EB]/25 px-5 py-3.5 bg-[#F0F6FF]/80 dark:bg-[#0D1C42]">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#1A6BFF] text-white shadow-sm">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#2563EB] text-white shadow-sm">
                 <Sparkles className="h-4 w-4" />
               </span>
               <div>
-                <h2 className="text-sm sm:text-base font-extrabold text-[#0A1E5C] dark:text-white">
+                <h2 className="text-sm sm:text-base font-extrabold text-[#081128] dark:text-white">
                   Your Event Flyer is Ready!
                 </h2>
-                <p className="text-[11px] text-[#0A1E5C]/65 dark:text-white/65">
-                  Download as PNG or share directly with your squad on WhatsApp
+                <p className="text-[11px] text-[#081128]/65 dark:text-white/65">
+                  1080×1350 (4:5) PNG Poster with scannable QR invite code
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="hidden sm:block">
-                <ThemeToggle />
-              </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#0B1A3A] text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF] transition"
-                aria-label="Close flyer modal"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-[#D6E6FF] dark:border-[#2563EB]/35 bg-white dark:bg-[#081128] text-[#081128] dark:text-white hover:border-[#2563EB] transition"
+              aria-label="Close flyer modal"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
 
-          {/* Body: Flyer Poster Preview + Action Controls */}
+          {/* Body: Live 4:5 Flyer Poster Preview + Controls */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-5 p-5 items-center max-h-[82vh] overflow-y-auto">
-            {/* Branded Flyer Preview Card */}
+            {/* 4:5 Flyer Poster */}
             <div className="md:col-span-7 flex justify-center">
               <div
-                className={`relative w-full max-w-[380px] aspect-[4/5] rounded-3xl overflow-hidden bg-gradient-to-br ${event.coverGradient} text-white shadow-2xl border border-white/20 flex flex-col justify-between p-5`}
+                className={`relative w-full max-w-[390px] aspect-[4/5] rounded-3xl overflow-hidden shadow-2xl border flex flex-col justify-between ${
+                  isDark
+                    ? 'bg-[#081128] text-white border-[#2563EB]/40'
+                    : 'bg-[#F4F8FF] text-[#081128] border-[#2563EB]/30'
+                }`}
               >
-                {/* Cover Background Photo */}
-                {event.coverImage && (
-                  <img
-                    src={event.coverImage}
-                    alt={event.name}
-                    className="absolute inset-0 h-full w-full object-cover"
+                {/* Top Half Cover Photo */}
+                <div className="relative h-[40%] w-full overflow-hidden bg-gradient-to-br from-[#0B2E8F] to-[#2563EB]">
+                  {event.coverImage && (
+                    <img
+                      src={event.coverImage}
+                      alt={event.name}
+                      crossOrigin="anonymous"
+                      className="h-full w-full object-cover"
+                    />
+                  )}
+                  <div
+                    className={`absolute inset-0 bg-gradient-to-b ${
+                      isDark
+                        ? 'from-[#081128]/65 via-[#081128]/20 to-[#081128]'
+                        : 'from-[#081128]/60 via-[#081128]/15 to-[#F4F8FF]'
+                    }`}
                   />
-                )}
-                {/* Scrim Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-b from-[#0A1430]/70 via-[#0B2E8F]/35 to-[#0A1430]/95" />
 
-                {/* Flyer Header */}
-                <div className="relative z-10 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1A6BFF] border border-white/40 text-sm font-black shadow">
-                      M
-                    </span>
-                    <div className="leading-tight">
-                      <p className="text-[11px] font-black tracking-wider">MONTE EVENTS</p>
-                      <p className="text-[9px] font-semibold text-[#D6E6FF] tracking-widest">
-                        OFFICIAL FLYER
-                      </p>
+                  {/* Top-left Orbital M Badge + Top-right Category Pill */}
+                  <div className="absolute top-3.5 left-3.5 right-3.5 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-[#2563EB] border border-white/80 text-white text-xs font-black shadow-lg">
+                        <span className="pointer-events-none absolute -inset-1 rounded-full border border-blue-200/70 -rotate-12 scale-x-125 scale-y-75" />
+                        M
+                      </span>
+                      <div className="leading-tight text-white drop-shadow">
+                        <p className="text-[10px] font-black tracking-wider">MONTE EVENTS</p>
+                        <p className="text-[8px] font-bold text-blue-200 tracking-widest">
+                          OFFICIAL FLYER
+                        </p>
+                      </div>
                     </div>
+                    <span className="rounded-full bg-[#2563EB] px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-white shadow">
+                      {event.customType || event.type}
+                    </span>
                   </div>
-                  <span className="rounded-full bg-[#1A6BFF] px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider shadow">
-                    {event.customType || event.type}
-                  </span>
                 </div>
 
-                {/* Flyer Lower Content */}
-                <div className="relative z-10 space-y-3">
+                {/* Middle & Bottom Content */}
+                <div className="relative z-10 flex-1 flex flex-col justify-between px-4 pb-3.5 -mt-6 space-y-2">
+                  {/* Uppercase Title + Host */}
                   <div>
-                    <span className="inline-block rounded-full bg-[#1A6BFF]/40 border border-white/25 px-2.5 py-0.5 text-[10px] font-extrabold tracking-widest uppercase text-[#D6E6FF]">
-                      You&apos;re Invited
-                    </span>
-                    <h3 className="mt-1.5 text-2xl font-black leading-tight tracking-tight drop-shadow-sm line-clamp-2">
+                    <h3 className="text-lg sm:text-xl font-black uppercase leading-tight tracking-tight line-clamp-2">
                       {event.name}
                     </h3>
-                    <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-blue-200">
-                      <ShieldCheck className="h-3.5 w-3.5" />
+                    <p
+                      className={`mt-0.5 inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider ${
+                        isDark ? 'text-blue-300' : 'text-[#2563EB]'
+                      }`}
+                    >
+                      <ShieldCheck className="h-3 w-3" />
                       Hosted by {event.createdBy}
                     </p>
                   </div>
 
-                  {/* Detail Grid */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="rounded-xl bg-[#13224A]/85 backdrop-blur-sm border border-[#2B7FFF]/35 p-2.5">
-                      <p className="text-[9px] font-extrabold uppercase tracking-wider text-blue-200 flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
+                  {/* 2x2 Glassmorphic Detail Grid */}
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <div
+                      className={`rounded-xl border p-2 ${
+                        isDark
+                          ? 'bg-[#0F1D40]/85 border-[#2563EB]/40'
+                          : 'bg-white/95 border-[#2563EB]/25'
+                      }`}
+                    >
+                      <p className="text-[8px] font-extrabold uppercase tracking-wider text-[#2563EB] dark:text-blue-300 flex items-center gap-1">
+                        <Calendar className="h-2.5 w-2.5 text-[#2563EB]" />
                         Date
                       </p>
-                      <p className="mt-0.5 text-xs font-extrabold truncate">
+                      <p className="text-[11px] font-extrabold truncate mt-0.5">
                         {formatDateShort(event.date)}
                       </p>
                     </div>
-                    <div className="rounded-xl bg-[#13224A]/85 backdrop-blur-sm border border-[#2B7FFF]/35 p-2.5">
-                      <p className="text-[9px] font-extrabold uppercase tracking-wider text-blue-200 flex items-center gap-1">
-                        <MapPin className="h-3 w-3" />
+                    <div
+                      className={`rounded-xl border p-2 ${
+                        isDark
+                          ? 'bg-[#0F1D40]/85 border-[#2563EB]/40'
+                          : 'bg-white/95 border-[#2563EB]/25'
+                      }`}
+                    >
+                      <p className="text-[8px] font-extrabold uppercase tracking-wider text-[#2563EB] dark:text-blue-300 flex items-center gap-1">
+                        <MapPin className="h-2.5 w-2.5 text-[#2563EB]" />
                         Location
                       </p>
-                      <p className="mt-0.5 text-xs font-extrabold truncate">
+                      <p className="text-[11px] font-extrabold truncate mt-0.5">
                         {event.location}
                       </p>
                     </div>
-                    <div className="rounded-xl bg-[#13224A]/85 backdrop-blur-sm border border-[#2B7FFF]/35 p-2.5">
-                      <p className="text-[9px] font-extrabold uppercase tracking-wider text-blue-200 flex items-center gap-1">
-                        <Wallet className="h-3 w-3" />
-                        Contribution
+                    <div
+                      className={`rounded-xl border p-2 ${
+                        isDark
+                          ? 'bg-[#0F1D40]/85 border-[#2563EB]/40'
+                          : 'bg-white/95 border-[#2563EB]/25'
+                      }`}
+                    >
+                      <p className="text-[8px] font-extrabold uppercase tracking-wider text-[#2563EB] dark:text-blue-300 flex items-center gap-1">
+                        <Wallet className="h-2.5 w-2.5 text-[#2563EB]" />
+                        KES / Person
                       </p>
-                      <p className="mt-0.5 text-xs font-extrabold truncate">
-                        {formatKES(event.costPerPerson)} / person
+                      <p className="text-[11px] font-extrabold truncate mt-0.5">
+                        {formatKES(event.costPerPerson)}
                       </p>
                     </div>
-                    <div className="rounded-xl bg-[#13224A]/85 backdrop-blur-sm border border-[#2B7FFF]/35 p-2.5">
-                      <p className="text-[9px] font-extrabold uppercase tracking-wider text-blue-200 flex items-center gap-1">
-                        <Users className="h-3 w-3" />
-                        Capacity
+                    <div
+                      className={`rounded-xl border p-2 ${
+                        isDark
+                          ? 'bg-[#0F1D40]/85 border-[#2563EB]/40'
+                          : 'bg-white/95 border-[#2563EB]/25'
+                      }`}
+                    >
+                      <p className="text-[8px] font-extrabold uppercase tracking-wider text-[#2563EB] dark:text-blue-300 flex items-center gap-1">
+                        <Users className="h-2.5 w-2.5 text-[#2563EB]" />
+                        Spots &amp; Pay
                       </p>
-                      <p className="mt-0.5 text-xs font-extrabold truncate">
-                        {event.maxGuests} Guests Max
+                      <p className="text-[11px] font-extrabold truncate mt-0.5">
+                        {event.maxGuests.toLocaleString()} Spots
+                        {event.mpesaNumber ? ' • M-PESA Ready' : ''}
                       </p>
                     </div>
                   </div>
 
-                  {/* Optional M-PESA Strip */}
-                  {event.mpesaNumber && (
-                    <div className="rounded-xl bg-emerald-500/20 border border-emerald-400/45 px-3 py-2">
-                      <p className="text-[9px] font-extrabold uppercase tracking-wider text-emerald-300 flex items-center gap-1">
-                        <Smartphone className="h-3 w-3" />
-                        {getMpesaLabel(event.mpesaType)}
+                  {/* Main Guests / Headliners (if any) */}
+                  {event.mainGuests && event.mainGuests.length > 0 && (
+                    <div className="space-y-1">
+                      <p
+                        className={`text-[8px] font-black uppercase tracking-widest flex items-center gap-1 ${
+                          isDark ? 'text-blue-300' : 'text-[#2563EB]'
+                        }`}
+                      >
+                        <Mic2 className="h-2.5 w-2.5" />
+                        Featuring / Main Guests
                       </p>
-                      <p className="text-xs font-extrabold text-white truncate mt-0.5">
-                        {event.mpesaNumber}
-                        {event.mpesaAccount ? ` • Acc: ${event.mpesaAccount}` : ''}
-                        {event.mpesaName ? ` (${event.mpesaName})` : ''}
-                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {event.mainGuests.slice(0, 4).map((mg) => (
+                          <span
+                            key={mg.id}
+                            className={`rounded-full border border-[#2563EB] px-2 py-0.5 text-[9px] font-extrabold ${
+                              isDark
+                                ? 'bg-[#2563EB]/25 text-white'
+                                : 'bg-[#2563EB]/10 text-[#081128]'
+                            }`}
+                          >
+                            {mg.name} · {mg.role}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   )}
 
-                  {/* Footer */}
-                  <div className="pt-2 border-t border-white/20 flex items-center justify-between gap-2 text-[10px]">
-                    <span className="font-mono font-bold text-[#D6E6FF] truncate">
-                      Code: {event.inviteCode}
-                    </span>
-                    <span className="font-bold text-blue-200 shrink-0">
-                      Plan it. Invite them. Monte it.
-                    </span>
+                  {/* Activities (Glowing Blue-Bordered Glassmorphic Pills — hidden if empty) */}
+                  {event.activities && event.activities.length > 0 && (
+                    <div className="space-y-1">
+                      <p
+                        className={`text-[8px] font-black uppercase tracking-widest ${
+                          isDark ? 'text-blue-300' : 'text-[#2563EB]'
+                        }`}
+                      >
+                        Activities
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {event.activities.slice(0, 6).map((act) => (
+                          <span
+                            key={act}
+                            className={`rounded-full border border-[#2563EB] px-2 py-0.5 text-[9px] font-bold shadow-[0_0_8px_rgba(37,99,235,0.3)] ${
+                              isDark
+                                ? 'bg-[#0F1D40]/90 text-blue-100'
+                                : 'bg-white text-[#1D4ED8]'
+                            }`}
+                          >
+                            {act}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Multi-Event Schedule (if added) */}
+                  {event.subEvents && event.subEvents.length > 0 && (
+                    <div className="space-y-0.5">
+                      <p
+                        className={`text-[8px] font-black uppercase tracking-widest flex items-center gap-1 ${
+                          isDark ? 'text-blue-300' : 'text-[#2563EB]'
+                        }`}
+                      >
+                        <CalendarPlus className="h-2.5 w-2.5" />
+                        Room Schedule
+                      </p>
+                      {event.subEvents.slice(0, 2).map((se) => (
+                        <p key={se.id} className="text-[9px] font-bold truncate opacity-90">
+                          • {se.title} ({formatDateShort(se.date)}
+                          {se.time ? ` · ${se.time}` : ''})
+                        </p>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Bottom Dark-Blue QR Card */}
+                  <div className="rounded-2xl bg-[#0D1C42] border border-[#2563EB]/60 p-2.5 flex items-center gap-3 text-white shadow-lg">
+                    <div className="h-14 w-14 shrink-0 rounded-xl bg-white p-1 flex items-center justify-center overflow-hidden">
+                      {qrDataUrl ? (
+                        <img
+                          src={qrDataUrl}
+                          alt="Join Room QR Code"
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <span className="text-[9px] font-bold text-[#081128]">QR</span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <p className="text-[11px] font-black tracking-wide truncate">
+                        JOIN ROOM: {event.inviteCode}
+                      </p>
+                      <span className="inline-block rounded-full bg-[#2563EB] px-2.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-white">
+                        RSVP &amp; PAY VIA MONTE
+                      </span>
+                      <p className="text-[8px] font-semibold text-blue-200/80 truncate">
+                        monte-gg.github.io/monte-events
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Right Column: Actions & Share Details */}
+            {/* Right Column: Style Toggles + Download & Share Controls */}
             <div className="md:col-span-5 space-y-4">
-              <div className="rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#F0F6FF]/70 dark:bg-[#13224A] p-4 space-y-2">
-                <p className="text-xs font-extrabold uppercase tracking-wider text-[#1A6BFF] dark:text-[#2B7FFF]">
-                  Ready to Share
+              {/* 2 Quick Style Toggles */}
+              <div className="rounded-2xl border border-[#D6E6FF] dark:border-[#2563EB]/30 bg-[#F0F6FF]/70 dark:bg-[#0D1C42] p-4 space-y-2.5">
+                <p className="text-[11px] font-extrabold uppercase tracking-wider text-[#2563EB] dark:text-blue-300">
+                  Poster Theme
                 </p>
-                <p className="text-sm font-bold text-[#0A1E5C] dark:text-white">
-                  {event.name}
-                </p>
-                <p className="text-xs text-[#0A1E5C]/70 dark:text-white/70 leading-relaxed">
-                  Save this high-res PNG flyer for WhatsApp Status, Instagram Stories, or group chats — and pair it with your instant join link.
-                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFlyerStyle('midnight')}
+                    className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-extrabold border transition ${
+                      flyerStyle === 'midnight'
+                        ? 'border-[#2563EB] bg-[#081128] text-white shadow-sm'
+                        : 'border-[#D6E6FF] dark:border-[#2563EB]/30 bg-white dark:bg-[#081128]/50 text-[#081128] dark:text-white'
+                    }`}
+                  >
+                    <Moon className="h-3.5 w-3.5 text-[#2563EB]" />
+                    Midnight Blue
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFlyerStyle('light')}
+                    className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-extrabold border transition ${
+                      flyerStyle === 'light'
+                        ? 'border-[#2563EB] bg-[#2563EB] text-white shadow-sm'
+                        : 'border-[#D6E6FF] dark:border-[#2563EB]/30 bg-white dark:bg-[#081128]/50 text-[#081128] dark:text-white'
+                    }`}
+                  >
+                    <Sun className="h-3.5 w-3.5" />
+                    Clean Light
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-2.5">
@@ -592,12 +859,12 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
                   type="button"
                   onClick={handleDownloadFlyer}
                   disabled={downloading}
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] disabled:opacity-60 px-5 py-3.5 text-sm font-extrabold text-white shadow-monte transition active:scale-95"
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 px-5 py-3.5 text-sm font-extrabold text-white shadow-monte transition active:scale-95"
                 >
                   {downloading ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Generating PNG Flyer…
+                      Generating 1080×1350 PNG…
                     </>
                   ) : (
                     <>
@@ -607,20 +874,20 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
                   )}
                 </button>
 
-                <a
-                  href={whatsappShareUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-600 px-5 py-3 text-sm font-extrabold text-white shadow-sm transition active:scale-95"
+                <button
+                  type="button"
+                  onClick={handleShareWhatsApp}
+                  disabled={sharing}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 px-5 py-3 text-sm font-extrabold text-white shadow-sm transition active:scale-95"
                 >
                   <Share2 className="h-4 w-4" />
-                  Share Invite on WhatsApp
-                </a>
+                  {sharing ? 'Preparing Share…' : 'Share to WhatsApp'}
+                </button>
 
                 <button
                   type="button"
                   onClick={handleCopyInvite}
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-white dark:bg-[#13224A] hover:border-[#1A6BFF] px-5 py-3 text-sm font-extrabold text-[#0A1E5C] dark:text-white transition"
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2563EB]/35 bg-white dark:bg-[#0D1C42] hover:border-[#2563EB] px-5 py-3 text-sm font-extrabold text-[#081128] dark:text-white transition"
                 >
                   {copiedLink ? (
                     <>
@@ -629,7 +896,7 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
                     </>
                   ) : (
                     <>
-                      <Copy className="h-4 w-4 text-[#1A6BFF] dark:text-[#2B7FFF]" />
+                      <Copy className="h-4 w-4 text-[#2563EB]" />
                       Copy Invite Link
                     </>
                   )}
@@ -639,7 +906,7 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="w-full rounded-2xl border border-transparent bg-[#F0F6FF] dark:bg-[#1A2D5E] hover:bg-[#D6E6FF]/70 dark:hover:bg-[#1A2D5E]/80 px-5 py-2.5 text-xs font-extrabold text-[#0A1E5C] dark:text-white transition"
+                className="w-full rounded-2xl bg-[#F0F6FF] dark:bg-[#13224A] hover:bg-[#D6E6FF]/70 dark:hover:bg-[#1A2D5E] px-5 py-2.5 text-xs font-extrabold text-[#081128] dark:text-white transition"
               >
                 Continue to Event Room
               </button>

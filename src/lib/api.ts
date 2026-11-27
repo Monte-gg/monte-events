@@ -6,12 +6,14 @@ import {
   ExpenseCategory,
   ExpenseItem,
   Guest,
+  MainGuest,
   MediaItem,
   MonteEvent,
   MpesaType,
   PaymentStatus,
   PlatformMember,
   PublicInvitePreview,
+  SubEvent,
 } from '../types';
 
 export const API_BASE_URL = (
@@ -92,6 +94,10 @@ interface RawRoom {
   mpesa_number?: string | null;
   mpesa_account?: string | null;
   mpesa_name?: string | null;
+  activities?: string[];
+  main_guests?: MainGuest[];
+  sub_events?: SubEvent[];
+  location_pin_url?: string | null;
   guests?: RawGuest[];
   expenses?: RawExpense[];
 }
@@ -191,6 +197,10 @@ function mapRoom(r: RawRoom): MonteEvent {
     mpesaNumber: r.mpesa_number || undefined,
     mpesaAccount: r.mpesa_account || undefined,
     mpesaName: r.mpesa_name || undefined,
+    activities: Array.isArray(r.activities) ? r.activities : [],
+    mainGuests: Array.isArray(r.main_guests) ? r.main_guests : [],
+    subEvents: Array.isArray(r.sub_events) ? r.sub_events : [],
+    locationPinUrl: r.location_pin_url || undefined,
   };
 }
 
@@ -281,6 +291,16 @@ export async function createRoomOnApi(
         mpesa_number: event.mpesaNumber || null,
         mpesa_account: event.mpesaAccount || null,
         mpesa_name: event.mpesaName || null,
+        activities: event.activities || [],
+        main_guests: event.mainGuests || [],
+        sub_events: event.subEvents || [],
+        location_pin_url: event.locationPinUrl || null,
+        expenses: (event.expenses || []).map((ex) => ({
+          title: ex.title,
+          category: ex.category,
+          amount: ex.amount,
+          paid_by: ex.paidBy,
+        })),
         guests: event.guests.map((g) => ({
           name: g.name,
           phone: g.phone,
@@ -303,6 +323,43 @@ export async function deleteRoomOnApi(roomId: string): Promise<boolean> {
   try {
     await fetchJson(`/api/rooms/${encodeURIComponent(roomId)}`, {
       method: 'DELETE',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function updateRoomOnApi(
+  roomId: string,
+  updates: {
+    totalBudget?: number;
+    maxGuests?: number;
+    costPerPerson?: number;
+    location?: string;
+    locationPinUrl?: string;
+    activities?: string[];
+    mainGuests?: MainGuest[];
+    subEvents?: SubEvent[];
+  }
+): Promise<boolean> {
+  try {
+    await fetchJson(`/api/rooms/${encodeURIComponent(roomId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        ...(updates.totalBudget !== undefined ? { total_budget: updates.totalBudget } : {}),
+        ...(updates.maxGuests !== undefined ? { max_guests: updates.maxGuests } : {}),
+        ...(updates.costPerPerson !== undefined
+          ? { cost_per_person: updates.costPerPerson }
+          : {}),
+        ...(updates.location !== undefined ? { location: updates.location } : {}),
+        ...(updates.locationPinUrl !== undefined
+          ? { location_pin_url: updates.locationPinUrl }
+          : {}),
+        ...(updates.activities !== undefined ? { activities: updates.activities } : {}),
+        ...(updates.mainGuests !== undefined ? { main_guests: updates.mainGuests } : {}),
+        ...(updates.subEvents !== undefined ? { sub_events: updates.subEvents } : {}),
+      }),
     });
     return true;
   } catch {

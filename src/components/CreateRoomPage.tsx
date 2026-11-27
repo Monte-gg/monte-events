@@ -3,14 +3,22 @@ import {
   ArrowLeft,
   ArrowRight,
   Calendar,
+  CalendarPlus,
   Check,
   Copy,
+  Crosshair,
+  ExternalLink,
   Image as ImageIcon,
   Link2,
   Loader2,
   MapPin,
+  Mic2,
+  Plus,
+  Receipt,
   Smartphone,
   Sparkles,
+  Tag,
+  Trash2,
   UploadCloud,
   UserPlus,
   Users,
@@ -19,7 +27,16 @@ import {
 } from 'lucide-react';
 import { EVENT_TYPES, formatKES } from '../data/sampleData';
 import { AnimatePresence, motion } from 'motion/react';
-import { EventType, Guest, MonteEvent, MpesaType } from '../types';
+import {
+  EventType,
+  ExpenseCategory,
+  ExpenseItem,
+  Guest,
+  MainGuest,
+  MonteEvent,
+  MpesaType,
+  SubEvent,
+} from '../types';
 import { uploadFileToStorage } from '../lib/monteService';
 import { ThemeToggle } from './ThemeToggle';
 import { EASE_SKIPER, SPRING_POP } from './MotionPrimitives';
@@ -82,6 +99,20 @@ const COVER_PRESETS: Record<EventType, { image: string; gradient: string }> = {
   },
 };
 
+const ACTIVITY_SUGGESTIONS: Record<EventType, string[]> = {
+  Roadtrip: ['Boat Ride', 'Campfire', 'Sunset Views', 'Nyama Choma', 'Cycling', 'Game Drive'],
+  Birthday: ['Afrohouse DJ', 'Cake Cutting', 'Cocktails', 'Photo Booth', 'Midnight Toast', 'Dinner'],
+  'Beach Trip': ['Dhow Cruise', 'Snorkeling', 'Beach Bonfire', 'Jet Ski', 'Pool Party', 'Seafood BBQ'],
+  Hiking: ['Summit Trek', 'Sunrise Views', 'Picnic Lunch', 'Waterfall Dip', 'Group Photos', 'Stretch Session'],
+  Wedding: ['Ceremony', 'Cocktail Hour', 'Reception Dinner', 'Live Band', 'First Dance', 'Afterparty'],
+  Graduation: ['Photo Shoot', 'Luncheon', 'Speeches', 'Toast', 'Live DJ', 'Family Dinner'],
+  'House Party': ['Game Night', 'Karaoke', 'Live DJ', 'BBQ Grill', 'Cocktails', 'Movie Screening'],
+  Concert: ['Live Performance', 'VIP Lounge', 'DJ Sets', 'Food Trucks', 'Meet & Greet', 'Afterparty'],
+  Custom: ['Networking', 'Keynote Talk', 'Live Music', 'Dinner', 'Awards', 'Afterparty'],
+};
+
+const GUEST_PRESETS = [10, 50, 100, 500, 1000, 10000];
+
 export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
   creatorName,
   creatorEmail,
@@ -103,16 +134,72 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
   const [eventType, setEventType] = useState<EventType>('Roadtrip');
   const [customType, setCustomType] = useState('');
 
-  // Step 2
+  // Step 2: Core Details + Pin Location + Cover + Activities + Main Guests + Multi-Events
   const [name, setName] = useState('');
   const [date, setDate] = useState('2026-12-28');
   const [location, setLocation] = useState('');
+  const [locationPinUrl, setLocationPinUrl] = useState('');
+  const [pinningGps, setPinningGps] = useState(false);
   const [description, setDescription] = useState('');
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
   const [isDraggingCover, setIsDraggingCover] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const coverInputRef = useRef<HTMLInputElement>(null);
+
+  // Activities (up to 6 tags)
+  const [activities, setActivities] = useState<string[]>([]);
+  const [activityInput, setActivityInput] = useState('');
+
+  // Main Guests / Headliners (Artists, Leaders, Speakers, VIPs)
+  const [mainGuests, setMainGuests] = useState<MainGuest[]>([]);
+  const [mainGuestName, setMainGuestName] = useState('');
+  const [mainGuestRole, setMainGuestRole] = useState('Headliner Artist');
+
+  // Additional Sub-Events in Same Room
+  const [subEvents, setSubEvents] = useState<SubEvent[]>([]);
+  const [subTitle, setSubTitle] = useState('');
+  const [subDate, setSubDate] = useState('2026-12-29');
+  const [subTime, setSubTime] = useState('');
+  const [subLocation, setSubLocation] = useState('');
+
+  // Step 3: Custom Budget, Custom Expenses, Unlimited Guests, Manual Guests, M-PESA
+  const [totalBudget, setTotalBudget] = useState<number>(60000);
+  const [maxGuests, setMaxGuests] = useState<number>(10);
+  const [customExpenses, setCustomExpenses] = useState<
+    { id: string; title: string; category: ExpenseCategory; amount: number }[]
+  >([]);
+  const [expTitle, setExpTitle] = useState('');
+  const [expCategory, setExpCategory] = useState<ExpenseCategory>('Transport');
+  const [expAmount, setExpAmount] = useState('');
+
+  const [manualGuests, setManualGuests] = useState<
+    { id: string; name: string; phone: string; email: string }[]
+  >([]);
+  const [manualName, setManualName] = useState('');
+  const [manualPhone, setManualPhone] = useState('');
+  const [manualEmail, setManualEmail] = useState('');
+  const [mpesaType, setMpesaType] = useState<MpesaType>('phone');
+  const [mpesaNumber, setMpesaNumber] = useState('');
+  const [mpesaAccount, setMpesaAccount] = useState('');
+  const [mpesaName, setMpesaName] = useState(creatorName);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const inviteCode = useMemo(
+    () => `MONTE-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+    []
+  );
+  const inviteUrl = `https://monte-gg.github.io/monte-events/?join=${inviteCode}`;
+
+  const customExpensesSum = useMemo(
+    () => customExpenses.reduce((sum, item) => sum + item.amount, 0),
+    [customExpenses]
+  );
+
+  const costPerPerson = useMemo(() => {
+    if (!maxGuests || maxGuests < 1) return 0;
+    return Math.round(totalBudget / maxGuests);
+  }, [totalBudget, maxGuests]);
 
   const handleSelectCoverFile = (file: File | null | undefined) => {
     if (!file) return;
@@ -138,31 +225,103 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
     }
   };
 
-  // Step 3
-  const [totalBudget, setTotalBudget] = useState<number>(60000);
-  const [maxGuests, setMaxGuests] = useState<number>(10);
-  const [manualGuests, setManualGuests] = useState<
-    { id: string; name: string; phone: string; email: string }[]
-  >([]);
-  const [manualName, setManualName] = useState('');
-  const [manualPhone, setManualPhone] = useState('');
-  const [manualEmail, setManualEmail] = useState('');
-  const [mpesaType, setMpesaType] = useState<MpesaType>('phone');
-  const [mpesaNumber, setMpesaNumber] = useState('');
-  const [mpesaAccount, setMpesaAccount] = useState('');
-  const [mpesaName, setMpesaName] = useState(creatorName);
-  const [copiedLink, setCopiedLink] = useState(false);
+  const handlePinCurrentGps = () => {
+    if (!navigator.geolocation) {
+      onShowToast('GPS is not supported on this browser — paste a Google Maps link instead.');
+      return;
+    }
+    setPinningGps(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude.toFixed(6);
+        const lng = pos.coords.longitude.toFixed(6);
+        const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+        setLocationPinUrl(url);
+        if (!location.trim()) {
+          setLocation(`${lat}, ${lng}`);
+        }
+        setPinningGps(false);
+        onShowToast('GPS location pinned for guests!');
+      },
+      () => {
+        setPinningGps(false);
+        onShowToast('Could not read GPS — paste a Google Maps link or search location.');
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
 
-  const inviteCode = useMemo(
-    () => `MONTE-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-    []
-  );
-  const inviteUrl = `https://monte-gg.github.io/monte-events/?join=${inviteCode}`;
+  const handleAddActivity = (rawTag?: string) => {
+    const tag = (rawTag ?? activityInput).trim();
+    if (!tag) return;
+    if (activities.length >= 6) {
+      onShowToast('You can add up to 6 activities for the flyer.');
+      return;
+    }
+    if (activities.some((a) => a.toLowerCase() === tag.toLowerCase())) {
+      setActivityInput('');
+      return;
+    }
+    setActivities((prev) => [...prev, tag]);
+    if (rawTag === undefined) setActivityInput('');
+  };
 
-  const costPerPerson = useMemo(() => {
-    if (!maxGuests || maxGuests < 1) return 0;
-    return Math.round(totalBudget / maxGuests);
-  }, [totalBudget, maxGuests]);
+  const handleAddMainGuest = () => {
+    if (!mainGuestName.trim()) return;
+    setMainGuests((prev) => [
+      ...prev,
+      {
+        id: `mguest-${Date.now()}`,
+        name: mainGuestName.trim(),
+        role: mainGuestRole.trim() || 'Featured Guest',
+      },
+    ]);
+    setMainGuestName('');
+  };
+
+  const handleAddSubEvent = () => {
+    if (!subTitle.trim()) return;
+    setSubEvents((prev) => [
+      ...prev,
+      {
+        id: `sub-${Date.now()}`,
+        title: subTitle.trim(),
+        date: subDate || date,
+        time: subTime.trim() || undefined,
+        location: subLocation.trim() || location.trim() || undefined,
+      },
+    ]);
+    setSubTitle('');
+    setSubTime('');
+    setSubLocation('');
+  };
+
+  const handleAddCustomExpense = () => {
+    const amt = Number(expAmount);
+    if (!expTitle.trim() || !amt || amt <= 0) return;
+    const nextList = [
+      ...customExpenses,
+      {
+        id: `cexp-${Date.now()}`,
+        title: expTitle.trim(),
+        category: expCategory,
+        amount: amt,
+      },
+    ];
+    setCustomExpenses(nextList);
+    const nextSum = nextList.reduce((s, x) => s + x.amount, 0);
+    setTotalBudget(nextSum);
+    setExpTitle('');
+    setExpAmount('');
+  };
+
+  const handleRemoveCustomExpense = (id: string) => {
+    const nextList = customExpenses.filter((x) => x.id !== id);
+    setCustomExpenses(nextList);
+    if (nextList.length > 0) {
+      setTotalBudget(nextList.reduce((s, x) => s + x.amount, 0));
+    }
+  };
 
   const handleAddManualGuest = () => {
     if (!manualName.trim()) return;
@@ -189,14 +348,24 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  const resolvedMapPreviewUrl = useMemo(() => {
+    if (locationPinUrl.trim()) return locationPinUrl.trim();
+    if (location.trim()) {
+      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.trim())}`;
+    }
+    return '';
+  }, [location, locationPinUrl]);
+
   const handleSubmit = async () => {
     if (isCreating) return;
     setIsCreating(true);
     try {
       const finalName =
-        name.trim() || `${eventType === 'Custom' && customType.trim() ? customType.trim() : eventType} Getaway`;
+        name.trim() ||
+        `${eventType === 'Custom' && customType.trim() ? customType.trim() : eventType} Getaway`;
       const finalLocation = location.trim() || 'Nairobi, KE';
       const preset = COVER_PRESETS[eventType];
+      const eventId = `evt-${Date.now()}`;
 
       let resolvedCoverImage = preset.image;
       if (coverFile) {
@@ -223,20 +392,47 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
         };
       });
 
+      const initialExpenses: ExpenseItem[] = customExpenses.map((ex, idx) => ({
+        id: `exp-init-${Date.now()}-${idx}`,
+        roomId: eventId,
+        title: ex.title,
+        category: ex.category,
+        amount: ex.amount,
+        paidBy: creatorName,
+      }));
+
+      // Build breakdown from user's own budget items (or 0s if they didn't split yet)
+      const breakdown = {
+        Transport: 0,
+        Food: 0,
+        Venue: 0,
+        DJ: 0,
+        Misc: 0,
+      };
+      for (const ex of customExpenses) {
+        if (ex.category === 'Transport') breakdown.Transport += ex.amount;
+        else if (ex.category === 'Food & Drinks') breakdown.Food += ex.amount;
+        else if (ex.category === 'Accommodation' || ex.category === 'Decor') breakdown.Venue += ex.amount;
+        else breakdown.Misc += ex.amount;
+      }
+
       const newEvent: MonteEvent = {
-        id: `evt-${Date.now()}`,
+        id: eventId,
         name: finalName,
         type: eventType,
         customType: eventType === 'Custom' ? customType.trim() || 'Custom Event' : undefined,
         date,
         location: finalLocation,
+        locationPinUrl:
+          locationPinUrl.trim() ||
+          `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(finalLocation)}`,
         description:
           description.trim() ||
           'Planned on Monte Events! Confirm your payment in the Guests tab and hop into the chat.',
         coverImage: resolvedCoverImage,
         coverGradient: preset.gradient,
         totalBudget,
-        maxGuests: Math.max(maxGuests, guests.length),
+        maxGuests: Math.max(1, maxGuests, guests.length),
         costPerPerson,
         inviteCode,
         unreadCount: 0,
@@ -250,14 +446,11 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
             ? mpesaAccount.trim()
             : undefined,
         mpesaName: mpesaName.trim() || undefined,
-        expenses: [],
-        budgetBreakdown: {
-          Transport: Math.round(totalBudget * 0.3),
-          Food: Math.round(totalBudget * 0.25),
-          Venue: Math.round(totalBudget * 0.25),
-          DJ: Math.round(totalBudget * 0.12),
-          Misc: Math.round(totalBudget * 0.08),
-        },
+        activities,
+        mainGuests,
+        subEvents,
+        expenses: initialExpenses,
+        budgetBreakdown: breakdown,
         guests,
       };
 
@@ -289,8 +482,8 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
               {step === 1
                 ? 'Choose Event Type'
                 : step === 2
-                ? 'Event Details'
-                : 'Budget, Guests & Invites'}
+                ? 'Details, Location Pin, Activities & Lineup'
+                : 'Your Budget, Guest Capacity & Invites'}
             </p>
           </div>
         </div>
@@ -303,7 +496,7 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
         {[
           { num: 1 as const, label: 'Event Type' },
-          { num: 2 as const, label: 'Details' },
+          { num: 2 as const, label: 'Details & Lineup' },
           { num: 3 as const, label: 'Budget & Guests' },
         ].map((s) => {
           const active = step === s.num;
@@ -357,7 +550,7 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
                   What are we planning?
                 </h2>
                 <p className="text-xs sm:text-sm text-[#0A1E5C]/65 dark:text-white/65 mt-0.5">
-                  Pick a vibe for your room — we’ll tailor the cover and budget template.
+                  Pick a vibe for your room — you can also bundle multiple events in one room in the next step.
                 </p>
               </div>
 
@@ -394,7 +587,7 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
                     type="text"
                     value={customType}
                     onChange={(e) => setCustomType(e.target.value)}
-                    placeholder="e.g. Game Night, Safari Camp, Yacht Party"
+                    placeholder="e.g. Tech Summit, Safari Camp, Festival, Crusade"
                     className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-4 py-2.5 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
                   />
                 </div>
@@ -413,7 +606,7 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
             </motion.div>
           )}
 
-          {/* STEP 2: DETAILS */}
+          {/* STEP 2: DETAILS, PIN LOCATION, ACTIVITIES, MAIN GUESTS, MULTI-EVENTS & COVER */}
           {step === 2 && (
             <motion.div
               key="step-2"
@@ -422,14 +615,14 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: direction * -36 }}
               transition={{ duration: 0.24, ease: EASE_SKIPER }}
-              className="space-y-5"
+              className="space-y-6"
             >
               <div>
                 <h2 className="text-lg font-extrabold text-[#0A1E5C] dark:text-white">
-                  Tell the squad about it
+                  Event Details, Location Pin &amp; Flyer Highlights
                 </h2>
                 <p className="text-xs sm:text-sm text-[#0A1E5C]/65 dark:text-white/65 mt-0.5">
-                  Give your room a catchy name, date, meeting point, and quick itinerary.
+                  Everything you add here appears in your room and on your auto-generated PNG Event Flyer.
                 </p>
               </div>
 
@@ -442,7 +635,7 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Nanyuki Weekend Roadtrip"
+                    placeholder="e.g. Nanyuki Weekend Roadtrip / Nairobi Summer Fest"
                     className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-4 py-3 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
                   />
                 </div>
@@ -464,7 +657,7 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70 mb-1.5">
-                    Location
+                    Location Name
                   </label>
                   <div className="relative">
                     <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#1A6BFF] dark:text-[#2B7FFF]" />
@@ -472,10 +665,53 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
                       type="text"
                       value={location}
                       onChange={(e) => setLocation(e.target.value)}
-                      placeholder="e.g. Westlands / Nanyuki / Diani"
+                      placeholder="e.g. Uhuru Gardens / Lake Naivasha / Diani"
                       className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] pl-10 pr-4 py-3 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
                     />
                   </div>
+                </div>
+
+                {/* Pin Location for Guests (Directions) */}
+                <div className="sm:col-span-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] p-4 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-[#0A1E5C] dark:text-white">
+                      <MapPin className="h-3.5 w-3.5 text-[#1A6BFF]" />
+                      Pin Exact Location for Guest Directions
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handlePinCurrentGps}
+                        disabled={pinningGps}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-3 py-1.5 text-[11px] font-extrabold text-white transition"
+                      >
+                        {pinningGps ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Crosshair className="h-3.5 w-3.5" />
+                        )}
+                        Pin My GPS
+                      </button>
+                      {resolvedMapPreviewUrl && (
+                        <a
+                          href={resolvedMapPreviewUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-white dark:bg-[#13224A] px-3 py-1.5 text-[11px] font-bold text-[#1A6BFF] dark:text-[#2B7FFF] hover:border-[#1A6BFF] transition"
+                        >
+                          Preview Map
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  <input
+                    type="url"
+                    value={locationPinUrl}
+                    onChange={(e) => setLocationPinUrl(e.target.value)}
+                    placeholder="Paste Google Maps link (optional — auto-generates directions from Location Name if blank)"
+                    className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3.5 py-2.5 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                  />
                 </div>
 
                 <div className="sm:col-span-2">
@@ -486,12 +722,237 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
                     rows={3}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Share departure times, dress code, activities, or what’s included..."
+                    placeholder="Share departure times, dress code, schedule, or what’s included..."
                     className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-4 py-3 text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none resize-none"
                   />
                 </div>
 
-                {/* Event Cover Image Upload (used on Room Header & Auto-Generated Flyer) */}
+                {/* Activities Tag Input (Up to 6) */}
+                <div className="sm:col-span-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-[#0A1E5C] dark:text-white">
+                      <Tag className="h-3.5 w-3.5 text-[#1A6BFF]" />
+                      Activities (Up to 6 — Featured on Flyer)
+                    </span>
+                    <span className="text-[11px] font-bold text-[#1A6BFF] dark:text-[#2B7FFF]">
+                      {activities.length}/6 selected
+                    </span>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={activityInput}
+                      onChange={(e) => setActivityInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddActivity();
+                        }
+                      }}
+                      placeholder="Add an activity (e.g. Boat Ride, Campfire, Live Band)"
+                      className="flex-1 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3.5 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAddActivity()}
+                      className="rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-4 py-2 text-xs font-extrabold text-white transition"
+                    >
+                      + Add
+                    </button>
+                  </div>
+
+                  {/* Quick clickable suggestions */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {ACTIVITY_SUGGESTIONS[eventType].map((sug) => {
+                      const already = activities.some(
+                        (a) => a.toLowerCase() === sug.toLowerCase()
+                      );
+                      return (
+                        <button
+                          key={sug}
+                          type="button"
+                          onClick={() =>
+                            already
+                              ? setActivities((prev) =>
+                                  prev.filter((a) => a.toLowerCase() !== sug.toLowerCase())
+                                )
+                              : handleAddActivity(sug)
+                          }
+                          className={`rounded-full px-3 py-1 text-[11px] font-bold border transition ${
+                            already
+                              ? 'border-[#1A6BFF] bg-[#1A6BFF] text-white'
+                              : 'border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] text-[#0A1E5C]/80 dark:text-white/80 hover:border-[#1A6BFF]'
+                          }`}
+                        >
+                          {already ? '✓ ' : '+ '}
+                          {sug}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {activities.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1 border-t border-[#D6E6FF]/70 dark:border-[#2B7FFF]/20">
+                      {activities.map((tag) => (
+                        <span
+                          key={tag}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-[#1A6BFF]/12 dark:bg-[#1A6BFF]/25 border border-[#1A6BFF]/40 px-3 py-1 text-xs font-extrabold text-[#1A6BFF] dark:text-blue-200"
+                        >
+                          {tag}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setActivities((prev) => prev.filter((a) => a !== tag))
+                            }
+                            aria-label={`Remove ${tag}`}
+                            className="hover:text-red-500"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Main Guests / Headliners (Artists, Leaders, Speakers, VIPs) */}
+                <div className="sm:col-span-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-[#0A1E5C] dark:text-white">
+                      <Mic2 className="h-3.5 w-3.5 text-[#1A6BFF]" />
+                      Main Guests / Headliners (Artists, Leaders, Speakers — Optional)
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <input
+                      type="text"
+                      value={mainGuestName}
+                      onChange={(e) => setMainGuestName(e.target.value)}
+                      placeholder="Name (e.g. DJ Joe Mfalme / Dr. Wanjiru)"
+                      className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={mainGuestRole}
+                      onChange={(e) => setMainGuestRole(e.target.value)}
+                      placeholder="Role (Artist, Leader, MC, Keynote)"
+                      className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddMainGuest}
+                      className="rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-4 py-2 text-xs font-extrabold text-white transition"
+                    >
+                      + Add Main Guest
+                    </button>
+                  </div>
+                  {mainGuests.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {mainGuests.map((mg) => (
+                        <span
+                          key={mg.id}
+                          className="inline-flex items-center gap-2 rounded-full bg-white dark:bg-[#13224A] border border-[#D6E6FF] dark:border-[#2B7FFF]/35 px-3 py-1 text-xs font-bold text-[#0A1E5C] dark:text-white"
+                        >
+                          <span className="font-extrabold">{mg.name}</span>
+                          <span className="text-[10px] font-extrabold uppercase text-[#1A6BFF] dark:text-[#2B7FFF]">
+                            {mg.role}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMainGuests((prev) => prev.filter((x) => x.id !== mg.id))
+                            }
+                            className="text-[#0A1E5C]/50 hover:text-red-500 dark:text-white/50"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Multi-Events / Additional Sessions in the Same Room */}
+                <div className="sm:col-span-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] p-4 space-y-3">
+                  <div>
+                    <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-[#0A1E5C] dark:text-white">
+                      <CalendarPlus className="h-3.5 w-3.5 text-[#1A6BFF]" />
+                      Running 2+ Events? Add Extra Events to This Same Room (Optional)
+                    </span>
+                    <p className="text-[11px] text-[#0A1E5C]/65 dark:text-white/65 mt-0.5">
+                      Bundle multiple days, sessions, or connected events (e.g. Day 1 Conference + Day 2 Gala) in one room.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                    <input
+                      type="text"
+                      value={subTitle}
+                      onChange={(e) => setSubTitle(e.target.value)}
+                      placeholder="Event / Session Title"
+                      className="sm:col-span-2 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                    />
+                    <input
+                      type="date"
+                      value={subDate}
+                      onChange={(e) => setSubDate(e.target.value)}
+                      className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={subTime}
+                      onChange={(e) => setSubTime(e.target.value)}
+                      placeholder="Time (e.g. 6:00 PM)"
+                      className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={subLocation}
+                      onChange={(e) => setSubLocation(e.target.value)}
+                      placeholder="Venue / Location (optional)"
+                      className="sm:col-span-3 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddSubEvent}
+                      className="rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-4 py-2 text-xs font-extrabold text-white transition"
+                    >
+                      + Add Event
+                    </button>
+                  </div>
+                  {subEvents.length > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      {subEvents.map((se) => (
+                        <div
+                          key={se.id}
+                          className="flex items-center justify-between gap-2 rounded-xl bg-white dark:bg-[#13224A] border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-3 py-2 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-extrabold text-[#0A1E5C] dark:text-white truncate">
+                              {se.title}
+                            </p>
+                            <p className="text-[11px] text-[#0A1E5C]/65 dark:text-white/65 truncate">
+                              {se.date}
+                              {se.time ? ` • ${se.time}` : ''}
+                              {se.location ? ` • ${se.location}` : ''}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSubEvents((prev) => prev.filter((x) => x.id !== se.id))
+                            }
+                            className="text-red-500 hover:bg-red-500/10 rounded-lg p-1"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Event Cover Image Upload */}
                 <div className="sm:col-span-2 space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <label className="block text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70">
@@ -583,7 +1044,7 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
             </motion.div>
           )}
 
-          {/* STEP 3: BUDGET & GUESTS + INVITE FRIENDS */}
+          {/* STEP 3: CUSTOM BUDGET, UNLIMITED GUESTS & INVITES */}
           {step === 3 && (
             <motion.div
               key="step-3"
@@ -594,258 +1055,358 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
               transition={{ duration: 0.24, ease: EASE_SKIPER }}
               className="space-y-6"
             >
-            {/* Budget & Max Guests */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="sm:col-span-2 space-y-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70 mb-1.5">
-                    Total Budget (KES)
-                  </label>
-                  <div className="relative">
-                    <Wallet className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#1A6BFF] dark:text-[#2B7FFF]" />
+              {/* Budget & Unlimited Max Guests */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="sm:col-span-2 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70 mb-1.5">
+                      Total Budget (KES) — Edit Freely
+                    </label>
+                    <div className="relative">
+                      <Wallet className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#1A6BFF] dark:text-[#2B7FFF]" />
+                      <input
+                        type="number"
+                        min={0}
+                        step={500}
+                        value={totalBudget}
+                        onChange={(e) => setTotalBudget(Math.max(0, Number(e.target.value)))}
+                        className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] pl-10 pr-4 py-3 text-sm font-bold text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70">
+                        Number of Guests (Any Capacity — up to 1,000,000+)
+                      </label>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[#F0F6FF] dark:bg-[#0B1A3A] px-3 py-0.5 text-xs font-extrabold text-[#1A6BFF] dark:text-[#2B7FFF]">
+                        <Users className="h-3.5 w-3.5" />
+                        {maxGuests.toLocaleString()} guests
+                      </span>
+                    </div>
                     <input
                       type="number"
-                      min={1000}
-                      step={1000}
-                      value={totalBudget}
-                      onChange={(e) => setTotalBudget(Math.max(0, Number(e.target.value)))}
-                      className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] pl-10 pr-4 py-3 text-sm font-bold text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                      min={1}
+                      max={10000000}
+                      value={maxGuests}
+                      onChange={(e) =>
+                        setMaxGuests(Math.max(1, Number(e.target.value) || 1))
+                      }
+                      placeholder="Enter any number (e.g. 20, 500, 1000000)"
+                      className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-4 py-3 text-sm font-bold text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
                     />
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {GUEST_PRESETS.map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setMaxGuests(n)}
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-bold border transition ${
+                            maxGuests === n
+                              ? 'border-[#1A6BFF] bg-[#1A6BFF] text-white'
+                              : 'border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#0B1A3A] text-[#0A1E5C]/75 dark:text-white/75 hover:border-[#1A6BFF]'
+                          }`}
+                        >
+                          {n.toLocaleString()}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/70 dark:text-white/70">
-                      Max Guests
-                    </label>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-[#F0F6FF] dark:bg-[#0B1A3A] px-3 py-0.5 text-xs font-extrabold text-[#1A6BFF] dark:text-[#2B7FFF]">
-                      <Users className="h-3.5 w-3.5" />
-                      {maxGuests} guests
+                {/* Auto-calculated Cost Per Person Card */}
+                <div className="rounded-2xl bg-gradient-to-br from-[#0B2E8F] to-[#1A6BFF] p-5 text-white flex flex-col justify-center">
+                  <span className="text-xs font-semibold text-white/80">
+                    Cost / Person
+                  </span>
+                  <p className="mt-1.5 text-2xl sm:text-3xl font-extrabold tracking-tight">
+                    {formatKES(costPerPerson)}
+                  </p>
+                  <span className="mt-2 text-[11px] text-white/80">
+                    Split across {maxGuests.toLocaleString()} guest{maxGuests === 1 ? '' : 's'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Build Your Own Budget / Add Expenses Yourself */}
+              <div className="rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-sm font-extrabold text-[#0A1E5C] dark:text-white">
+                    <Receipt className="h-4 w-4 text-[#1A6BFF] dark:text-[#2B7FFF]" />
+                    Add Your Own Budget Expenses (Optional)
+                  </div>
+                  {customExpenses.length > 0 && (
+                    <span className="text-xs font-extrabold text-[#1A6BFF] dark:text-[#2B7FFF]">
+                      Items Total: {formatKES(customExpensesSum)}
                     </span>
-                  </div>
+                  )}
+                </div>
+                <p className="text-[11px] text-[#0A1E5C]/65 dark:text-white/65">
+                  Instead of automatic percentages, list your own planned expenses (e.g. Sound System, Venue Hire, Buses) — your Total Budget updates automatically, and you can still edit it anytime.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                   <input
-                    type="range"
-                    min={2}
-                    max={50}
-                    value={maxGuests}
-                    onChange={(e) => setMaxGuests(Number(e.target.value))}
-                    className="w-full accent-[#1A6BFF] cursor-pointer"
+                    type="text"
+                    value={expTitle}
+                    onChange={(e) => setExpTitle(e.target.value)}
+                    placeholder="Expense item (e.g. Stage & Sound)"
+                    className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
                   />
-                  <div className="flex justify-between text-[11px] text-[#0A1E5C]/50 dark:text-white/50">
-                    <span>2</span>
-                    <span>25</span>
-                    <span>50</span>
+                  <select
+                    value={expCategory}
+                    onChange={(e) => setExpCategory(e.target.value as ExpenseCategory)}
+                    className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm font-bold text-[#0A1E5C] dark:text-white focus:outline-none"
+                  >
+                    <option value="Transport">Transport</option>
+                    <option value="Accommodation">Accommodation</option>
+                    <option value="Food & Drinks">Food &amp; Drinks</option>
+                    <option value="Decor">Decor</option>
+                    <option value="Other">Other</option>
+                  </select>
+                  <input
+                    type="number"
+                    min={1}
+                    value={expAmount}
+                    onChange={(e) => setExpAmount(e.target.value)}
+                    placeholder="Amount (KES)"
+                    className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddCustomExpense}
+                    className="inline-flex items-center justify-center gap-1 rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-4 py-2 text-xs sm:text-sm font-bold text-white transition"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add Expense
+                  </button>
+                </div>
+
+                {customExpenses.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    {customExpenses.map((ex) => (
+                      <div
+                        key={ex.id}
+                        className="flex items-center justify-between gap-2 rounded-xl bg-white dark:bg-[#13224A] border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-3 py-2 text-xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-extrabold text-[#0A1E5C] dark:text-white truncate">
+                            {ex.title}
+                          </span>
+                          <span className="rounded-full bg-[#F0F6FF] dark:bg-[#0B1A3A] px-2 py-0.5 text-[10px] font-bold text-[#1A6BFF] dark:text-[#2B7FFF]">
+                            {ex.category}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="font-extrabold text-[#0A1E5C] dark:text-white">
+                            {formatKES(ex.amount)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCustomExpense(ex.id)}
+                            className="text-red-500 hover:bg-red-500/10 rounded-lg p-1"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
+                )}
+              </div>
+
+              {/* Add Guest Manually */}
+              <div className="rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-extrabold text-[#0A1E5C] dark:text-white">
+                  <UserPlus className="h-4 w-4 text-[#1A6BFF] dark:text-[#2B7FFF]" />
+                  Add Guests by Name, Phone, or Email
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                  <input
+                    type="text"
+                    value={manualName}
+                    onChange={(e) => setManualName(e.target.value)}
+                    placeholder="Guest Name"
+                    className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                  />
+                  <input
+                    type="tel"
+                    value={manualPhone}
+                    onChange={(e) => setManualPhone(e.target.value)}
+                    placeholder="Phone (+254...)"
+                    className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                  />
+                  <input
+                    type="email"
+                    value={manualEmail}
+                    onChange={(e) => setManualEmail(e.target.value)}
+                    placeholder="Email (optional)"
+                    className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddManualGuest}
+                    className="rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-4 py-2 text-xs sm:text-sm font-bold text-white transition"
+                  >
+                    + Add Guest
+                  </button>
+                </div>
+
+                {manualGuests.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {manualGuests.map((mg) => (
+                      <span
+                        key={mg.id}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-white dark:bg-[#13224A] border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-3 py-1 text-xs font-bold text-[#0A1E5C] dark:text-white"
+                      >
+                        {mg.name}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setManualGuests((prev) => prev.filter((x) => x.id !== mg.id))
+                          }
+                          className="text-[#0A1E5C]/50 hover:text-red-500 dark:text-white/50"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Optional Host M-PESA Payment Details */}
+              <div className="rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 text-sm font-extrabold text-[#0A1E5C] dark:text-white">
+                    <Smartphone className="h-4 w-4 text-emerald-500" />
+                    Host M-PESA Details (Optional)
+                  </div>
+                  <span className="text-[11px] font-semibold text-[#0A1E5C]/60 dark:text-white/60">
+                    Guests can copy &amp; submit confirmation codes
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {(
+                    [
+                      { id: 'phone', label: 'Send Money' },
+                      { id: 'till', label: 'Till Number' },
+                      { id: 'paybill', label: 'Paybill' },
+                      { id: 'pochi', label: 'Pochi la Biashara' },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setMpesaType(opt.id)}
+                      className={`rounded-xl px-3 py-1.5 text-xs font-extrabold border transition ${
+                        mpesaType === opt.id
+                          ? 'border-[#1A6BFF] bg-[#1A6BFF] text-white'
+                          : 'border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] text-[#0A1E5C] dark:text-white'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <input
+                    type="text"
+                    value={mpesaNumber}
+                    onChange={(e) => setMpesaNumber(e.target.value)}
+                    placeholder={
+                      mpesaType === 'paybill'
+                        ? 'Paybill Business No.'
+                        : mpesaType === 'till'
+                        ? 'Buy Goods Till No.'
+                        : 'Phone (07XX XXX XXX)'
+                    }
+                    className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                  />
+                  {mpesaType === 'paybill' && (
+                    <input
+                      type="text"
+                      value={mpesaAccount}
+                      onChange={(e) => setMpesaAccount(e.target.value)}
+                      placeholder="Account Name / Number"
+                      className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                    />
+                  )}
+                  <input
+                    type="text"
+                    value={mpesaName}
+                    onChange={(e) => setMpesaName(e.target.value)}
+                    placeholder="Recipient / Account Name"
+                    className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                  />
                 </div>
               </div>
 
-              {/* Auto-calculated Cost Per Person Card */}
-              <div className="rounded-2xl bg-gradient-to-br from-[#0B2E8F] to-[#1A6BFF] p-5 text-white flex flex-col justify-center">
-                <span className="text-xs font-semibold text-white/80">
-                  Auto-Calculated Cost / Person
-                </span>
-                <p className="mt-1.5 text-2xl sm:text-3xl font-extrabold tracking-tight">
-                  {formatKES(costPerPerson)}
-                </p>
-                <span className="mt-2 text-[11px] text-white/80">
-                  Split across {maxGuests} guests
-                </span>
-              </div>
-            </div>
-
-            {/* Add Guest Manually */}
-            <div className="rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] p-4 space-y-3">
-              <div className="flex items-center gap-2 text-sm font-extrabold text-[#0A1E5C] dark:text-white">
-                <UserPlus className="h-4 w-4 text-[#1A6BFF] dark:text-[#2B7FFF]" />
-                Add Guests by Name, Phone, or Email
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-                <input
-                  type="text"
-                  value={manualName}
-                  onChange={(e) => setManualName(e.target.value)}
-                  placeholder="Guest Name"
-                  className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                />
-                <input
-                  type="tel"
-                  value={manualPhone}
-                  onChange={(e) => setManualPhone(e.target.value)}
-                  placeholder="Phone (+254...)"
-                  className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                />
-                <input
-                  type="email"
-                  value={manualEmail}
-                  onChange={(e) => setManualEmail(e.target.value)}
-                  placeholder="Email (optional)"
-                  className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                />
+              {/* Invite Link Box */}
+              <div className="rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/80 dark:bg-[#0B1A3A] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#1A6BFF] text-white">
+                    <Link2 className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-[#0A1E5C] dark:text-white">
+                      Shareable Room Invite Link
+                    </p>
+                    <p className="truncate text-xs text-[#1A6BFF] dark:text-[#2B7FFF] font-mono">
+                      {inviteUrl}
+                    </p>
+                  </div>
+                </div>
                 <button
                   type="button"
-                  onClick={handleAddManualGuest}
-                  className="rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-4 py-2 text-xs sm:text-sm font-bold text-white transition"
+                  onClick={handleCopyInvite}
+                  className="shrink-0 inline-flex items-center justify-center gap-1.5 rounded-xl bg-white dark:bg-[#13224A] border border-[#D6E6FF] dark:border-[#2B7FFF]/40 px-4 py-2 text-xs font-extrabold text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF] transition"
                 >
-                  + Add Guest
+                  {copiedLink ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 text-emerald-500" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5 text-[#1A6BFF] dark:text-[#2B7FFF]" />
+                      Copy Link
+                    </>
+                  )}
                 </button>
               </div>
 
-              {manualGuests.length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {manualGuests.map((mg) => (
-                    <span
-                      key={mg.id}
-                      className="inline-flex items-center gap-1.5 rounded-full bg-white dark:bg-[#13224A] border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-3 py-1 text-xs font-bold text-[#0A1E5C] dark:text-white"
-                    >
-                      {mg.name}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setManualGuests((prev) => prev.filter((x) => x.id !== mg.id))
-                        }
-                        className="text-[#0A1E5C]/50 hover:text-red-500 dark:text-white/50"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Optional Host M-PESA Payment Details */}
-            <div className="rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] p-4 space-y-3">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2 text-sm font-extrabold text-[#0A1E5C] dark:text-white">
-                  <Smartphone className="h-4 w-4 text-emerald-500" />
-                  Host M-PESA Details (Optional)
-                </div>
-                <span className="text-[11px] font-semibold text-[#0A1E5C]/60 dark:text-white/60">
-                  Guests can copy &amp; submit confirmation codes
-                </span>
+              {/* Footer actions */}
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => goToStep(2)}
+                  className="inline-flex items-center gap-1.5 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-5 py-3 text-sm font-bold text-[#0A1E5C] dark:text-white hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={isCreating}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] disabled:opacity-60 px-7 py-3.5 text-sm font-extrabold text-white shadow-monte transition active:scale-95"
+                >
+                  {isCreating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Creating Room &amp; Flyer…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4" />
+                      Create Room &amp; Generate Flyer
+                    </>
+                  )}
+                </button>
               </div>
-
-              <div className="flex flex-wrap gap-2">
-                {(
-                  [
-                    { id: 'phone', label: 'Send Money' },
-                    { id: 'till', label: 'Till Number' },
-                    { id: 'paybill', label: 'Paybill' },
-                    { id: 'pochi', label: 'Pochi la Biashara' },
-                  ] as const
-                ).map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => setMpesaType(opt.id)}
-                    className={`rounded-xl px-3 py-1.5 text-xs font-extrabold border transition ${
-                      mpesaType === opt.id
-                        ? 'border-[#1A6BFF] bg-[#1A6BFF] text-white'
-                        : 'border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] text-[#0A1E5C] dark:text-white'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <input
-                  type="text"
-                  value={mpesaNumber}
-                  onChange={(e) => setMpesaNumber(e.target.value)}
-                  placeholder={
-                    mpesaType === 'paybill'
-                      ? 'Paybill Business No.'
-                      : mpesaType === 'till'
-                      ? 'Buy Goods Till No.'
-                      : 'Phone (07XX XXX XXX)'
-                  }
-                  className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                />
-                {mpesaType === 'paybill' && (
-                  <input
-                    type="text"
-                    value={mpesaAccount}
-                    onChange={(e) => setMpesaAccount(e.target.value)}
-                    placeholder="Account Name / Number"
-                    className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                  />
-                )}
-                <input
-                  type="text"
-                  value={mpesaName}
-                  onChange={(e) => setMpesaName(e.target.value)}
-                  placeholder="Recipient / Account Name"
-                  className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Invite Link Box */}
-            <div className="rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/80 dark:bg-[#0B1A3A] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#1A6BFF] text-white">
-                  <Link2 className="h-4 w-4" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-[#0A1E5C] dark:text-white">
-                    Shareable Room Invite Link
-                  </p>
-                  <p className="truncate text-xs text-[#1A6BFF] dark:text-[#2B7FFF] font-mono">
-                    {inviteUrl}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleCopyInvite}
-                className="shrink-0 inline-flex items-center justify-center gap-1.5 rounded-xl bg-white dark:bg-[#13224A] border border-[#D6E6FF] dark:border-[#2B7FFF]/40 px-4 py-2 text-xs font-extrabold text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF] transition"
-              >
-                {copiedLink ? (
-                  <>
-                    <Check className="h-3.5 w-3.5 text-emerald-500" />
-                    Copied!
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3.5 w-3.5 text-[#1A6BFF] dark:text-[#2B7FFF]" />
-                    Copy Link
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* Footer actions */}
-            <div className="flex items-center justify-between pt-2">
-              <button
-                type="button"
-                onClick={() => goToStep(2)}
-                className="inline-flex items-center gap-1.5 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-5 py-3 text-sm font-bold text-[#0A1E5C] dark:text-white hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={isCreating}
-                className="inline-flex items-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] disabled:opacity-60 px-7 py-3.5 text-sm font-extrabold text-white shadow-monte transition active:scale-95"
-              >
-                {isCreating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Creating Room &amp; Flyer…
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-4 w-4" />
-                    Create Room &amp; Generate Flyer
-                  </>
-                )}
-              </button>
-            </div>
             </motion.div>
           )}
         </AnimatePresence>

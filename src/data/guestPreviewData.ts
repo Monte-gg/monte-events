@@ -111,6 +111,28 @@ export const GUEST_PREVIEW_EVENTS: MonteEvent[] = [
     mpesaType: 'till',
     mpesaNumber: '4128950',
     mpesaName: 'Monte Naivasha Convoy',
+    locationPinUrl: 'https://www.google.com/maps/search/?api=1&query=Lake+Naivasha+Kenya',
+    activities: ['Boat Ride', 'Campfire', 'Sunset Views', 'Nyama Choma', 'Hell’s Gate Cycling'],
+    mainGuests: [
+      { id: 'mg-n1', name: 'DJ Kym Nickdee', role: 'Guest DJ' },
+      { id: 'mg-n2', name: 'Amina Ochieng', role: 'Convoy Captain' },
+    ],
+    subEvents: [
+      {
+        id: 'se-n1',
+        title: 'Day 1: Hell’s Gate Cycling & Sunset Boat Ride',
+        date: '2026-12-14',
+        time: '10:30 AM',
+        location: 'Hell’s Gate & Crescent Island',
+      },
+      {
+        id: 'se-n2',
+        title: 'Day 1 Night: Lakeside Bonfire & Nyama Choma',
+        date: '2026-12-14',
+        time: '7:00 PM',
+        location: 'Fisherman’s Camp, Naivasha',
+      },
+    ],
     expenses: [
       {
         id: 'pex-1',
@@ -230,6 +252,12 @@ export const GUEST_PREVIEW_EVENTS: MonteEvent[] = [
     inviteCode: 'MONTE-WST27',
     unreadCount: 1,
     createdBy: 'Monte Host',
+    locationPinUrl: 'https://www.google.com/maps/search/?api=1&query=Westlands+Nairobi',
+    activities: ['Afrohouse DJ Set', 'Rooftop Cocktails', 'Midnight Toast', 'Photo Booth'],
+    mainGuests: [
+      { id: 'mg-w1', name: 'DJ Joe Mfalme', role: 'Headliner DJ' },
+      { id: 'mg-w2', name: 'Faith Wanjiku', role: 'Birthday Star' },
+    ],
     budgetBreakdown: {
       Transport: 6000,
       Food: 18000,
@@ -289,6 +317,27 @@ export const GUEST_PREVIEW_EVENTS: MonteEvent[] = [
     inviteCode: 'MONTE-DIANI',
     unreadCount: 3,
     createdBy: 'Monte Host',
+    locationPinUrl: 'https://www.google.com/maps/search/?api=1&query=Diani+Beach+Kenya',
+    activities: ['Dhow Cruise', 'Dolphin Watching', 'Beach Bonfire', 'Snorkeling', 'Pool Party'],
+    mainGuests: [
+      { id: 'mg-d1', name: 'DJ Grauchi', role: 'Beach Set' },
+    ],
+    subEvents: [
+      {
+        id: 'se-d1',
+        title: 'Day 1: Villa Check-in & Sunset Pool Party',
+        date: '2027-01-10',
+        time: '4:00 PM',
+        location: 'Diani Beachfront Villa',
+      },
+      {
+        id: 'se-d2',
+        title: 'Day 2: Wasini Island Dolphin Dhow Cruise',
+        date: '2027-01-11',
+        time: '8:30 AM',
+        location: 'Shimoni Pier -> Wasini Island',
+      },
+    ],
     budgetBreakdown: {
       Transport: 54000,
       Food: 42000,

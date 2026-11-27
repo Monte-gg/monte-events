@@ -165,3 +165,12 @@ create policy "Allow read expenses" on public.expenses
 drop policy if exists "Allow authenticated write expenses" on public.expenses;
 create policy "Allow authenticated write expenses" on public.expenses
   for all to authenticated using (true) with check (true);
+
+-- ============================================================================
+-- Step 2 Additions: Activities, Main Guests/Headliners, Multi-Events & Map Pin
+-- ============================================================================
+alter table public.rooms
+  add column if not exists activities jsonb not null default '[]'::jsonb,
+  add column if not exists main_guests jsonb not null default '[]'::jsonb,
+  add column if not exists sub_events jsonb not null default '[]'::jsonb,
+  add column if not exists location_pin_url text;

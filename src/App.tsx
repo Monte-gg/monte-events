@@ -23,6 +23,7 @@ import {
   sendWelcomeEmailOnApi,
   submitGuestMpesaCodeOnApi,
   toggleGuestPaymentOnApi,
+  updateRoomOnApi,
 } from './lib/api';
 import {
   addGuestInSupabase,
@@ -727,6 +728,38 @@ function MonteAppContent() {
     [isGuestMode, supabaseUserId, user.email, user.name]
   );
 
+  const handleUpdateRoom = (
+    eventId: string,
+    updates: {
+      totalBudget?: number;
+      maxGuests?: number;
+      costPerPerson?: number;
+    }
+  ) => {
+    if (isGuestMode) {
+      promptGuestToSignUp('Sign in to edit room budget and guest capacity.');
+      return;
+    }
+    setEvents((prev) =>
+      prev.map((ev) =>
+        ev.id === eventId
+          ? {
+              ...ev,
+              ...(updates.totalBudget !== undefined
+                ? { totalBudget: updates.totalBudget }
+                : {}),
+              ...(updates.maxGuests !== undefined ? { maxGuests: updates.maxGuests } : {}),
+              ...(updates.costPerPerson !== undefined
+                ? { costPerPerson: updates.costPerPerson }
+                : {}),
+            }
+          : ev
+      )
+    );
+    void updateRoomOnApi(eventId, updates);
+    showToast('Room budget & capacity updated!');
+  };
+
   const handleDeleteEvent = (eventId: string) => {
     if (isGuestMode) {
       promptGuestToSignUp('Sign in to manage and delete your event rooms.');
@@ -1394,6 +1427,7 @@ function MonteAppContent() {
               onRemoveGuestFromEvent={handleRemoveGuestFromEvent}
               onAddExpense={handleAddExpense}
               onDeleteExpense={handleDeleteExpense}
+              onUpdateRoom={handleUpdateRoom}
               onUploadMedia={handleUploadMedia}
               onSendMessage={handleSendMessage}
               onToggleReaction={handleToggleReaction}
