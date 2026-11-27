@@ -1,9 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import {
   Calendar,
+  Check,
   MapPin,
+  MessageCircle,
   RefreshCw,
   Search,
+  UserCheck,
   UserPlus,
   Users,
   X,
@@ -15,10 +18,13 @@ import { SPRING_SNAPPY } from './MotionPrimitives';
 
 interface MembersPageProps {
   members: PlatformMember[];
+  friendIds: string[];
   events: MonteEvent[];
   currentUserEmail?: string;
   loading?: boolean;
   onRefresh: () => void;
+  onAddFriend: (member: PlatformMember) => void;
+  onStartFriendChat: (member: PlatformMember) => void;
   onInviteMemberToRoom: (roomId: string, member: PlatformMember) => void;
   onCreateRoom: () => void;
 }
@@ -43,10 +49,13 @@ const AVATAR_COLORS = [
 
 export const MembersPage: React.FC<MembersPageProps> = ({
   members,
+  friendIds,
   events,
   currentUserEmail,
   loading = false,
   onRefresh,
+  onAddFriend,
+  onStartFriendChat,
   onInviteMemberToRoom,
   onCreateRoom,
 }) => {
@@ -254,16 +263,39 @@ export const MembersPage: React.FC<MembersPageProps> = ({
                   </div>
                 </div>
 
-                {/* Action button */}
+                {/* Action buttons: Add Friend / Message + Invite to Room */}
                 {!isMe && (
-                  <button
-                    type="button"
-                    onClick={() => setInvitingMember(member)}
-                    className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] py-2.5 px-4 text-xs font-extrabold text-white shadow-sm transition active:scale-95"
-                  >
-                    <UserPlus className="h-3.5 w-3.5" />
-                    Invite to Room
-                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    {friendIds.includes(member.id) ? (
+                      <button
+                        type="button"
+                        onClick={() => onStartFriendChat(member)}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-500/35 bg-emerald-500/10 hover:bg-emerald-500/20 py-2.5 px-3 text-xs font-extrabold text-emerald-700 dark:text-emerald-300 transition active:scale-95"
+                      >
+                        <MessageCircle className="h-3.5 w-3.5" />
+                        <span>Chat</span>
+                        <Check className="h-3 w-3" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onAddFriend(member)}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-[#F0F6FF] dark:bg-[#0B1A3A] hover:border-[#1A6BFF] py-2.5 px-3 text-xs font-extrabold text-[#0A1E5C] dark:text-white transition active:scale-95"
+                      >
+                        <UserCheck className="h-3.5 w-3.5 text-[#1A6BFF] dark:text-[#2B7FFF]" />
+                        Add Friend
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setInvitingMember(member)}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] py-2.5 px-3 text-xs font-extrabold text-white shadow-sm transition active:scale-95"
+                    >
+                      <UserPlus className="h-3.5 w-3.5" />
+                      Invite Room
+                    </button>
+                  </div>
                 )}
               </motion.div>
             );

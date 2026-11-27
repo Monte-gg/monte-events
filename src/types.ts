@@ -129,6 +129,16 @@ export interface NotificationItem {
   eventId?: string;
 }
 
+export interface DirectMessage {
+  id: string;
+  friendId: string;
+  senderName: string;
+  senderInitials: string;
+  isMe: boolean;
+  text: string;
+  timestamp: string;
+}
+
 export interface PlatformMember {
   id: string;
   name: string;

@@ -50,6 +50,7 @@ import {
 import {
   AppPage,
   ChatMessage,
+  DirectMessage,
   EventRoomTab,
   Guest,
   MediaItem,
@@ -124,6 +125,28 @@ function MonteAppContent() {
   const [events, setEvents] = useState<MonteEvent[]>(INITIAL_EVENTS);
   const [members, setMembers] = useState<PlatformMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
+  const [friends, setFriends] = useState<PlatformMember[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const saved = window.localStorage.getItem('monte-friends');
+      return saved ? (JSON.parse(saved) as PlatformMember[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [directMessagesByFriend, setDirectMessagesByFriend] = useState<
+    Record<string, DirectMessage[]>
+  >(() => {
+    if (typeof window === 'undefined') return {};
+    try {
+      const saved = window.localStorage.getItem('monte-direct-messages');
+      return saved ? (JSON.parse(saved) as Record<string, DirectMessage[]>) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [activeChatSection, setActiveChatSection] = useState<'events' | 'friends'>('events');
+  const [activeFriendId, setActiveFriendId] = useState<string | null>(null);
   const [media, setMedia] = useState<MediaItem[]>(INITIAL_MEDIA);
   const [messagesByEvent, setMessagesByEvent] =
     useState<Record<string, ChatMessage[]>>(INITIAL_MESSAGES);
@@ -424,6 +447,21 @@ function MonteAppContent() {
     setUser(GUEST_USER_PROFILE);
     setEvents(GUEST_PREVIEW_EVENTS);
     setMembers(GUEST_PREVIEW_MEMBERS);
+    setFriends(GUEST_PREVIEW_MEMBERS.slice(0, 3));
+    setDirectMessagesByFriend({
+      [GUEST_PREVIEW_MEMBERS[0].id]: [
+        {
+          id: 'pdm-1',
+          friendId: GUEST_PREVIEW_MEMBERS[0].id,
+          senderName: GUEST_PREVIEW_MEMBERS[0].name,
+          senderInitials: GUEST_PREVIEW_MEMBERS[0].initials,
+          isMe: false,
+          text: 'Hey! Are you joining the Nairobi to Naivasha roadtrip this weekend?',
+          timestamp: '10:20 AM',
+        },
+      ],
+    });
+    setActiveFriendId(GUEST_PREVIEW_MEMBERS[0].id);
     setMedia(GUEST_PREVIEW_MEDIA);
     setMessagesByEvent(GUEST_PREVIEW_MESSAGES);
     setActiveEventId(GUEST_PREVIEW_EVENTS[0].id);
@@ -788,6 +826,63 @@ function MonteAppContent() {
     setMembersLoading(false);
   }, [isGuestMode]);
 
+  const handleAddFriend = (member: PlatformMember) => {
+    if (isGuestMode) {
+      promptGuestToSignUp(
+        'Create a free account to add friends and chat with them directly.'
+      );
+      return;
+    }
+    setFriends((prev) => {
+      if (prev.some((f) => f.id === member.id)) return prev;
+      const next = [member, ...prev];
+      try {
+        window.localStorage.setItem('monte-friends', JSON.stringify(next));
+      } catch {
+        // Ignore storage quota errors
+      }
+      return next;
+    });
+    showToast(`Added ${member.name} as a friend!`, 'success');
+  };
+
+  const handleStartFriendChat = (member: PlatformMember) => {
+    setActiveChatSection('friends');
+    setActiveFriendId(member.id);
+    setCurrentPage('chats');
+  };
+
+  const handleSendDirectMessage = (friendId: string, text: string) => {
+    if (isGuestMode) {
+      promptGuestToSignUp(
+        'Sign in to chat with your friends and plan events together.'
+      );
+      return;
+    }
+    if (!text.trim()) return;
+    const dm: DirectMessage = {
+      id: `dm-${Date.now()}`,
+      friendId,
+      senderName: user.name,
+      senderInitials: user.initials,
+      isMe: true,
+      text: text.trim(),
+      timestamp: getCurrentTimeLabel(),
+    };
+    setDirectMessagesByFriend((prev) => {
+      const next = {
+        ...prev,
+        [friendId]: [...(prev[friendId] || []), dm],
+      };
+      try {
+        window.localStorage.setItem('monte-direct-messages', JSON.stringify(next));
+      } catch {
+        // Ignore storage quota errors
+      }
+      return next;
+    });
+  };
+
   const handleInviteMemberToRoom = (roomId: string, member: PlatformMember) => {
     if (isGuestMode) {
       promptGuestToSignUp(
@@ -1050,12 +1145,20 @@ function MonteAppContent() {
               user={user}
               activeChatEventId={activeChatEventId}
               typingByEvent={typingByEvent}
+              friends={friends}
+              directMessagesByFriend={directMessagesByFriend}
+              activeChatSection={activeChatSection}
+              activeFriendId={activeFriendId}
+              onChangeChatSection={setActiveChatSection}
               onSelectChatEvent={handleSelectGlobalChat}
+              onSelectFriend={setActiveFriendId}
               onSendMessage={handleSendMessage}
+              onSendDirectMessage={handleSendDirectMessage}
               onToggleReaction={handleToggleReaction}
               onTogglePin={handleTogglePin}
               onAddGuestToEvent={handleAddGuestToEvent}
               onSelectMedia={handleSelectMedia}
+              onGoToMembers={() => setCurrentPage('members')}
               onShowToast={showToast}
             />
           )}
@@ -1063,10 +1166,13 @@ function MonteAppContent() {
           {currentPage === 'members' && (
             <MembersPage
               members={members}
+              friendIds={friends.map((f) => f.id)}
               events={events}
               currentUserEmail={user.email}
               loading={membersLoading}
               onRefresh={handleRefreshMembers}
+              onAddFriend={handleAddFriend}
+              onStartFriendChat={handleStartFriendChat}
               onInviteMemberToRoom={handleInviteMemberToRoom}
               onCreateRoom={() => setCurrentPage('create')}
             />
