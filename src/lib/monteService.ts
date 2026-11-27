@@ -536,6 +536,25 @@ export async function uploadMediaInSupabase(items: MediaItem[]) {
   }
 }
 
+export async function deleteRoomDirectlyInSupabase(
+  roomId: string,
+  inviteCode?: string
+): Promise<void> {
+  try {
+    const ops: PromiseLike<unknown>[] = [];
+    if (roomId && !roomId.startsWith('evt-')) {
+      ops.push(supabase.from('rooms').delete().eq('id', roomId));
+    }
+    if (inviteCode) {
+      ops.push(supabase.from('rooms').delete().eq('invite_code', inviteCode));
+    }
+    ops.push(supabase.from('events').delete().eq('id', roomId));
+    await Promise.allSettled(ops);
+  } catch {
+    // Graceful fallback — Render API delete also runs in parallel
+  }
+}
+
 export async function upsertProfileInSupabase(
   userId: string | null,
   profile: UserProfile

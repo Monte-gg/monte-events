@@ -29,6 +29,7 @@ import {
   addGuestInSupabase,
   createEventInSupabase,
   deleteEventInSupabase,
+  deleteRoomDirectlyInSupabase,
   fetchProfileFromSupabase,
   loadAllMonteData,
   sendMessageInSupabase,
@@ -117,6 +118,17 @@ function MonteAppContent() {
   const [isGuestMode, setIsGuestMode] = useState(false);
   const isGuestModeRef = useRef(false);
   const apiOnlineRef = useRef(false);
+  const deletedRoomKeysRef = useRef<Set<string>>(
+    (() => {
+      if (typeof window === 'undefined') return new Set<string>();
+      try {
+        const raw = window.sessionStorage.getItem('monte-deleted-rooms');
+        return raw ? new Set<string>(JSON.parse(raw) as string[]) : new Set<string>();
+      } catch {
+        return new Set<string>();
+      }
+    })()
+  );
   useEffect(() => {
     isGuestModeRef.current = isGuestMode;
   }, [isGuestMode]);
@@ -261,20 +273,27 @@ function MonteAppContent() {
           schemaReady: synced.schemaReady,
         });
         if (synced.events && synced.events.length > 0 && !isGuestModeRef.current && !apiOnlineRef.current) {
+          const cleanSynced = synced.events.filter(
+            (e) =>
+              !deletedRoomKeysRef.current.has(e.id) &&
+              !deletedRoomKeysRef.current.has(e.inviteCode)
+          );
           setEvents((prev) => {
             // Preserve any locally created optimistic rooms not yet in Supabase events table
-            const syncedCodes = new Set(synced.events!.map((e) => e.inviteCode));
+            const syncedCodes = new Set(cleanSynced.map((e) => e.inviteCode));
             const localOnly = prev.filter(
-              (e) => e.id.startsWith('evt-') && !syncedCodes.has(e.inviteCode)
+              (e) =>
+                e.id.startsWith('evt-') &&
+                !syncedCodes.has(e.inviteCode) &&
+                !deletedRoomKeysRef.current.has(e.id) &&
+                !deletedRoomKeysRef.current.has(e.inviteCode)
             );
-            return [...localOnly, ...synced.events!];
+            return [...localOnly, ...cleanSynced];
           });
-          setActiveEventId((curr) =>
-            curr ? curr : synced.events![0].id
-          );
-          setActiveChatEventId((curr) =>
-            curr ? curr : synced.events![0].id
-          );
+          if (cleanSynced.length > 0) {
+            setActiveEventId((curr) => (curr ? curr : cleanSynced[0].id));
+            setActiveChatEventId((curr) => (curr ? curr : cleanSynced[0].id));
+          }
         }
         if (synced.media && synced.media.length > 0) {
           setMedia(synced.media);
@@ -330,23 +349,34 @@ function MonteAppContent() {
       }
 
       if (apiRooms && apiRooms.length > 0) {
+        const cleanApiRooms = apiRooms.filter(
+          (e) =>
+            !deletedRoomKeysRef.current.has(e.id) &&
+            !deletedRoomKeysRef.current.has(e.inviteCode)
+        );
         setEvents((prev) => {
-          const apiCodes = new Set(apiRooms.map((e) => e.inviteCode));
+          const apiCodes = new Set(cleanApiRooms.map((e) => e.inviteCode));
           const localOnly = prev.filter(
-            (e) => e.id.startsWith('evt-') && !apiCodes.has(e.inviteCode)
+            (e) =>
+              e.id.startsWith('evt-') &&
+              !apiCodes.has(e.inviteCode) &&
+              !deletedRoomKeysRef.current.has(e.id) &&
+              !deletedRoomKeysRef.current.has(e.inviteCode)
           );
-          return [...localOnly, ...apiRooms];
+          return [...localOnly, ...cleanApiRooms];
         });
-        setActiveEventId((curr) =>
-          curr && (apiRooms.some((e) => e.id === curr) || curr.startsWith('evt-'))
-            ? curr
-            : apiRooms[0].id
-        );
-        setActiveChatEventId((curr) =>
-          curr && (apiRooms.some((e) => e.id === curr) || curr.startsWith('evt-'))
-            ? curr
-            : apiRooms[0].id
-        );
+        if (cleanApiRooms.length > 0) {
+          setActiveEventId((curr) =>
+            curr && (cleanApiRooms.some((e) => e.id === curr) || curr.startsWith('evt-'))
+              ? curr
+              : cleanApiRooms[0].id
+          );
+          setActiveChatEventId((curr) =>
+            curr && (cleanApiRooms.some((e) => e.id === curr) || curr.startsWith('evt-'))
+              ? curr
+              : cleanApiRooms[0].id
+          );
+        }
 
         // Fetch per-room messages in parallel
         const msgEntries = await Promise.all(
@@ -813,7 +843,22 @@ function MonteAppContent() {
       showToast('Only the room host can delete this room.', 'info');
       return;
     }
+    // Immediately tombstone ID & inviteCode so no in-flight sync or quick refresh brings it back
+    deletedRoomKeysRef.current.add(eventId);
+    if (target?.inviteCode) {
+      deletedRoomKeysRef.current.add(target.inviteCode);
+    }
+    try {
+      window.sessionStorage.setItem(
+        'monte-deleted-rooms',
+        JSON.stringify(Array.from(deletedRoomKeysRef.current))
+      );
+    } catch {
+      // Ignore storage quota errors
+    }
+
     setEvents((prev) => prev.filter((e) => e.id !== eventId));
+    setFlyerEvent((curr) => (curr && curr.id === eventId ? null : curr));
     setMessagesByEvent((prev) => {
       const next = { ...prev };
       delete next[eventId];
@@ -829,6 +874,8 @@ function MonteAppContent() {
     if (activeChatEventId === eventId) {
       setActiveChatEventId(null);
     }
+    // Delete directly in Supabase (~100ms) AND via Render API in parallel
+    void deleteRoomDirectlyInSupabase(eventId, target?.inviteCode);
     void deleteRoomOnApi(eventId);
     void deleteEventInSupabase(eventId);
     showToast(
