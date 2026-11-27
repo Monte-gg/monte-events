@@ -38,6 +38,10 @@ export const MediaVaultPage: React.FC<MediaVaultPageProps> = ({
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
+    if (user.memberSince === 'Preview Mode') {
+      onUploadMedia(uploadTargetId || 'preview', []);
+      return;
+    }
     const targetEvent = events.find((e) => e.id === uploadTargetId) || events[0];
     if (!targetEvent) return;
     const fileArray = Array.from(files);

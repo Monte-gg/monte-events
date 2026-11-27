@@ -37,6 +37,8 @@ interface ProfilePageProps {
   events: MonteEvent[];
   media: MediaItem[];
   supabaseStatus: { connected: boolean; schemaReady: boolean };
+  isGuestMode?: boolean;
+  onPromptAuth?: (message?: string, mode?: 'login' | 'signup') => void;
   onUpdateProfile: (updated: UserProfile) => void;
   onOpenEvent: (eventId: string, tab?: EventRoomTab) => void;
   onSelectMedia: (item: MediaItem) => void;
@@ -57,6 +59,8 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   events,
   media,
   supabaseStatus,
+  isGuestMode = false,
+  onPromptAuth,
   onUpdateProfile,
   onOpenEvent,
   onSelectMedia,
@@ -84,6 +88,13 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const openEditModal = () => {
+    if (isGuestMode) {
+      onPromptAuth?.(
+        'Create a free account to customize your Monte Events profile.',
+        'signup'
+      );
+      return;
+    }
     setDraft(user);
     setEditOpen(true);
   };

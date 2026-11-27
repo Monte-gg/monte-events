@@ -171,6 +171,10 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
 
   const handleMediaFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
+    if (user.memberSince === 'Preview Mode') {
+      onUploadMedia(event.id, []);
+      return;
+    }
     const fileArray = Array.from(files);
     const newItems: MediaItem[] = await Promise.all(
       fileArray.map(async (file, idx) => {

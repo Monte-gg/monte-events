@@ -118,6 +118,11 @@ export const EventChatRoom: React.FC<EventChatRoomProps> = ({
   const handleFileAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (user.memberSince === 'Preview Mode') {
+      onSendMessage(event.id, '');
+      e.target.value = '';
+      return;
+    }
     const isVideo = file.type.startsWith('video/');
     const url = await uploadFileToStorage(file, `chat/${event.id}`);
     onSendMessage(

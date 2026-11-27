@@ -1,8 +1,10 @@
 import React from 'react';
 import {
   CalendarRange,
+  Compass,
   Home,
   Images,
+  LogIn,
   MessageCircle,
   PlusCircle,
   User,
@@ -18,6 +20,8 @@ interface AppShellProps {
   onNavigate: (page: AppPage) => void;
   totalUnreadChats: number;
   user: UserProfile;
+  isGuestMode?: boolean;
+  onPromptAuth?: (message?: string, mode?: 'login' | 'signup') => void;
   children: React.ReactNode;
 }
 
@@ -26,6 +30,8 @@ export const AppShell: React.FC<AppShellProps> = ({
   onNavigate,
   totalUnreadChats,
   user,
+  isGuestMode = false,
+  onPromptAuth,
   children,
 }) => {
   const navItems: {
@@ -113,31 +119,57 @@ export const AppShell: React.FC<AppShellProps> = ({
             <ThemeToggle compact />
           </div>
 
-          <button
-            type="button"
-            onClick={() => onNavigate('profile')}
-            className="w-full flex items-center gap-3 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-[#F0F6FF]/80 dark:bg-[#13224A] p-2.5 text-left hover:border-[#1A6BFF]/50 transition"
-          >
-            <div className="h-10 w-10 shrink-0 rounded-full overflow-hidden ring-2 ring-[#1A6BFF]/40 bg-[#1A6BFF] text-white flex items-center justify-center text-xs font-extrabold">
-              {user.avatarUrl ? (
-                <img
-                  src={user.avatarUrl}
-                  alt={user.name}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <span>{user.initials}</span>
-              )}
+          {isGuestMode ? (
+            <div className="rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#F0F6FF]/85 dark:bg-[#13224A] p-3 space-y-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 shrink-0 rounded-full bg-[#1A6BFF]/15 text-[#1A6BFF] dark:text-[#2B7FFF] flex items-center justify-center">
+                  <Compass className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-extrabold text-[#0A1E5C] dark:text-white">
+                    Guest Visitor
+                  </p>
+                  <p className="truncate text-[11px] text-[#0A1E5C]/60 dark:text-white/60">
+                    Preview Mode
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onPromptAuth?.(undefined, 'login')}
+                className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] py-2 text-xs font-extrabold text-white shadow-sm transition active:scale-95"
+              >
+                <LogIn className="h-3.5 w-3.5" />
+                Sign In
+              </button>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold text-[#0A1E5C] dark:text-white">
-                {user.name}
-              </p>
-              <p className="truncate text-xs text-[#0A1E5C]/60 dark:text-white/60">
-                @{user.username}
-              </p>
-            </div>
-          </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onNavigate('profile')}
+              className="w-full flex items-center gap-3 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-[#F0F6FF]/80 dark:bg-[#13224A] p-2.5 text-left hover:border-[#1A6BFF]/50 transition"
+            >
+              <div className="h-10 w-10 shrink-0 rounded-full overflow-hidden ring-2 ring-[#1A6BFF]/40 bg-[#1A6BFF] text-white flex items-center justify-center text-xs font-extrabold">
+                {user.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span>{user.initials}</span>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-[#0A1E5C] dark:text-white">
+                  {user.name}
+                </p>
+                <p className="truncate text-xs text-[#0A1E5C]/60 dark:text-white/60">
+                  @{user.username}
+                </p>
+              </div>
+            </button>
+          )}
         </div>
       </aside>
 
@@ -158,24 +190,58 @@ export const AppShell: React.FC<AppShellProps> = ({
           </button>
           <div className="flex items-center gap-2">
             <ThemeToggle compact />
-            <button
-              type="button"
-              onClick={() => onNavigate('profile')}
-              className="h-8 w-8 rounded-full overflow-hidden ring-2 ring-[#1A6BFF]/50 bg-[#1A6BFF] text-white flex items-center justify-center text-xs font-bold"
-              aria-label="Open profile"
-            >
-              {user.avatarUrl ? (
-                <img
-                  src={user.avatarUrl}
-                  alt={user.name}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <span>{user.initials}</span>
-              )}
-            </button>
+            {isGuestMode ? (
+              <button
+                type="button"
+                onClick={() => onPromptAuth?.(undefined, 'login')}
+                className="inline-flex items-center gap-1 rounded-full bg-[#1A6BFF] hover:bg-[#2B7FFF] px-3 py-1.5 text-xs font-extrabold text-white transition"
+              >
+                <LogIn className="h-3 w-3" />
+                Sign In
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onNavigate('profile')}
+                className="h-8 w-8 rounded-full overflow-hidden ring-2 ring-[#1A6BFF]/50 bg-[#1A6BFF] text-white flex items-center justify-center text-xs font-bold"
+                aria-label="Open profile"
+              >
+                {user.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span>{user.initials}</span>
+                )}
+              </button>
+            )}
           </div>
         </header>
+
+        {/* Slim non-intrusive Guest Preview Banner */}
+        {isGuestMode && (
+          <div className="shrink-0 border-b border-[#1A6BFF]/25 bg-gradient-to-r from-[#0B2E8F] via-[#1A6BFF] to-[#2B7FFF] px-4 py-2 text-white">
+            <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 text-xs">
+              <p className="font-semibold text-white/95">
+                <span className="font-extrabold">Preview Mode</span> — Sign in to create rooms, invite friends &amp; save your events
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  onPromptAuth?.(
+                    'Create a free account to host rooms, invite friends, and save your events.',
+                    'signup'
+                  )
+                }
+                className="shrink-0 rounded-full bg-white text-[#0B2E8F] hover:bg-[#F0F6FF] px-3.5 py-1 text-[11px] font-extrabold shadow-xs transition active:scale-95"
+              >
+                Create Free Account
+              </button>
+            </div>
+          </div>
+        )}
 
         <main
           className={

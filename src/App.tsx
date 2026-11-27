@@ -38,6 +38,12 @@ import {
   INITIAL_USER_PROFILE,
 } from './data/sampleData';
 import {
+  GUEST_PREVIEW_EVENTS,
+  GUEST_PREVIEW_MEDIA,
+  GUEST_PREVIEW_MESSAGES,
+  GUEST_USER_PROFILE,
+} from './data/guestPreviewData';
+import {
   AppPage,
   ChatMessage,
   EventRoomTab,
@@ -79,6 +85,12 @@ function detectEmailVerifiedFromUrl(): boolean {
 
 function MonteAppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isGuestMode, setIsGuestMode] = useState(false);
+  const [authModal, setAuthModal] = useState<{
+    open: boolean;
+    mode: 'login' | 'signup';
+    message: string | null;
+  }>({ open: false, mode: 'signup', message: null });
   const [showEmailVerified, setShowEmailVerified] = useState<boolean>(() =>
     detectEmailVerifiedFromUrl()
   );
@@ -114,6 +126,8 @@ function MonteAppContent() {
 
       const uid = sessionUser.id;
       setSupabaseUserId(uid);
+      setIsGuestMode(false);
+      setAuthModal({ open: false, mode: 'login', message: null });
       setIsAuthenticated(true);
 
       const meta = sessionUser.user_metadata || {};
@@ -326,6 +340,29 @@ function MonteAppContent() {
     [events]
   );
 
+  const promptGuestToSignUp = useCallback(
+    (
+      message = 'Create a free account to save changes and invite friends.',
+      mode: 'login' | 'signup' = 'signup'
+    ) => {
+      setAuthModal({ open: true, mode, message });
+    },
+    []
+  );
+
+  const handleExploreAsGuest = () => {
+    setIsGuestMode(true);
+    setIsAuthenticated(true);
+    setUser(GUEST_USER_PROFILE);
+    setEvents(GUEST_PREVIEW_EVENTS);
+    setMedia(GUEST_PREVIEW_MEDIA);
+    setMessagesByEvent(GUEST_PREVIEW_MESSAGES);
+    setActiveEventId(GUEST_PREVIEW_EVENTS[0].id);
+    setActiveChatEventId(GUEST_PREVIEW_EVENTS[0].id);
+    setCurrentPage('dashboard');
+    showToast('Exploring in Guest Preview Mode', 'info');
+  };
+
   const handleLogin = (payload?: {
     userId?: string;
     name?: string;
@@ -334,6 +371,9 @@ function MonteAppContent() {
     avatarUrl?: string;
   }) => {
     if (!payload?.userId) return;
+    const wasGuest = isGuestMode;
+    setIsGuestMode(false);
+    setAuthModal({ open: false, mode: 'login', message: null });
     setSupabaseUserId(payload.userId);
     const nextName =
       payload.name || payload.email?.split('@')[0] || 'Monte Member';
@@ -341,15 +381,35 @@ function MonteAppContent() {
     const initials = (
       (parts[0]?.[0] || 'M') + (parts[1]?.[0] || parts[0]?.[1] || 'E')
     ).toUpperCase();
-    setUser((prev) => ({
-      ...prev,
+    setUser({
+      ...INITIAL_USER_PROFILE,
       name: nextName,
       username: nextName.toLowerCase().replace(/[^a-z0-9_]/g, '') || 'member',
-      email: payload.email || prev.email,
-      phone: payload.phone || prev.phone,
-      avatarUrl: payload.avatarUrl || prev.avatarUrl,
+      email: payload.email || '',
+      phone: payload.phone || '',
+      avatarUrl: payload.avatarUrl || '',
       initials,
-    }));
+    });
+    if (wasGuest) {
+      setEvents([]);
+      setMedia([]);
+      setMessagesByEvent({});
+      setActiveEventId('');
+      setActiveChatEventId(null);
+      // Reload real rooms & media from backend/Supabase
+      void Promise.all([fetchRoomsFromApi(), fetchMediaFromApi()]).then(
+        ([apiRooms, apiMedia]) => {
+          if (apiRooms && apiRooms.length > 0) {
+            setEvents(apiRooms);
+            setActiveEventId(apiRooms[0].id);
+            setActiveChatEventId(apiRooms[0].id);
+          }
+          if (apiMedia && apiMedia.length > 0) {
+            setMedia(apiMedia);
+          }
+        }
+      );
+    }
     void fetchProfileFromSupabase(payload.userId).then((dbProfile) => {
       if (dbProfile) {
         setUser((prev) => ({ ...prev, ...dbProfile }));
@@ -361,14 +421,25 @@ function MonteAppContent() {
   };
 
   const handleLogout = async () => {
-    await signOutSupabase();
+    if (!isGuestMode) {
+      await signOutSupabase();
+    }
+    setIsGuestMode(false);
+    setAuthModal({ open: false, mode: 'login', message: null });
     setSupabaseUserId(null);
     setIsAuthenticated(false);
+    setEvents([]);
+    setMedia([]);
+    setMessagesByEvent({});
     setCurrentPage('dashboard');
-    showToast('Signed out successfully', 'info');
+    showToast(isGuestMode ? 'Exited Preview Mode' : 'Signed out successfully', 'info');
   };
 
   const handleDeleteAccount = async (): Promise<{ ok: boolean; error?: string }> => {
+    if (isGuestMode) {
+      promptGuestToSignUp('Sign in to manage your account settings.', 'login');
+      return { ok: false, error: 'Not signed in.' };
+    }
     const { data: sessionData } = await supabase.auth.getSession();
     const accessToken = sessionData.session?.access_token;
     if (!accessToken) {
@@ -415,6 +486,12 @@ function MonteAppContent() {
   };
 
   const handleCreateEvent = (newEvent: MonteEvent) => {
+    if (isGuestMode) {
+      promptGuestToSignUp(
+        'Create a free account to save your event room and invite guests.'
+      );
+      return;
+    }
     setEvents((prev) => [newEvent, ...prev]);
     const welcomeMsg: ChatMessage = {
       id: `welcome-${Date.now()}`,
@@ -460,6 +537,10 @@ function MonteAppContent() {
   };
 
   const handleDeleteEvent = (eventId: string) => {
+    if (isGuestMode) {
+      promptGuestToSignUp('Sign in to manage and delete your event rooms.');
+      return;
+    }
     const target = events.find((e) => e.id === eventId);
     setEvents((prev) => prev.filter((e) => e.id !== eventId));
     setMessagesByEvent((prev) => {
@@ -486,6 +567,12 @@ function MonteAppContent() {
   };
 
   const handleToggleGuestPaid = (eventId: string, guestId: string) => {
+    if (isGuestMode) {
+      promptGuestToSignUp(
+        'Sign in to confirm M-Pesa payments and track event budgets.'
+      );
+      return;
+    }
     setEvents((prev) =>
       prev.map((ev) => {
         if (ev.id !== eventId) return ev;
@@ -515,6 +602,12 @@ function MonteAppContent() {
   };
 
   const handleAddGuestToEvent = (eventId: string, guest: Guest) => {
+    if (isGuestMode) {
+      promptGuestToSignUp(
+        'Create a free account to invite friends and manage guest lists.'
+      );
+      return;
+    }
     setEvents((prev) =>
       prev.map((ev) =>
         ev.id === eventId
@@ -545,6 +638,12 @@ function MonteAppContent() {
   };
 
   const handleUploadMedia = (_eventId: string, items: MediaItem[]) => {
+    if (isGuestMode) {
+      promptGuestToSignUp(
+        'Create a free account to upload photos and videos to your Media Vault.'
+      );
+      return;
+    }
     setMedia((prev) => [...items, ...prev]);
     void uploadMediaInSupabase(items);
     items.forEach((item) => {
@@ -560,6 +659,12 @@ function MonteAppContent() {
       media?: { type: 'photo' | 'video'; url: string; title?: string };
     }
   ) => {
+    if (isGuestMode) {
+      promptGuestToSignUp(
+        'Create a free account to chat with friends and coordinate events.'
+      );
+      return;
+    }
     const newMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
       eventId,
@@ -605,6 +710,10 @@ function MonteAppContent() {
   };
 
   const handleToggleReaction = (eventId: string, messageId: string, emoji: string) => {
+    if (isGuestMode) {
+      promptGuestToSignUp('Create a free account to react to messages.');
+      return;
+    }
     setMessagesByEvent((prev) => ({
       ...prev,
       [eventId]: (prev[eventId] || []).map((msg) => {
@@ -633,6 +742,10 @@ function MonteAppContent() {
   };
 
   const handleTogglePin = (eventId: string, messageId: string) => {
+    if (isGuestMode) {
+      promptGuestToSignUp('Create a free account to pin event announcements.');
+      return;
+    }
     setMessagesByEvent((prev) => ({
       ...prev,
       [eventId]: (prev[eventId] || []).map((msg) => {
@@ -646,6 +759,12 @@ function MonteAppContent() {
   };
 
   const handleUpdateProfile = (updated: UserProfile) => {
+    if (isGuestMode) {
+      promptGuestToSignUp(
+        'Create a free account to customize your Monte Events profile.'
+      );
+      return;
+    }
     setUser(updated);
     void upsertProfileInSupabase(supabaseUserId, updated);
   };
@@ -677,13 +796,19 @@ function MonteAppContent() {
           onContinue={handleContinueAfterVerified}
         />
       ) : !isAuthenticated ? (
-        <AuthPage onLogin={handleLogin} onShowToast={showToast} />
+        <AuthPage
+          onLogin={handleLogin}
+          onExploreAsGuest={handleExploreAsGuest}
+          onShowToast={showToast}
+        />
       ) : (
         <AppShell
           currentPage={currentPage}
           onNavigate={handleNavigate}
           totalUnreadChats={totalUnreadChats}
           user={user}
+          isGuestMode={isGuestMode}
+          onPromptAuth={promptGuestToSignUp}
         >
           {currentPage === 'dashboard' && (
             <DashboardPage
@@ -774,6 +899,8 @@ function MonteAppContent() {
               events={events}
               media={media}
               supabaseStatus={supabaseStatus}
+              isGuestMode={isGuestMode}
+              onPromptAuth={promptGuestToSignUp}
               onUpdateProfile={handleUpdateProfile}
               onOpenEvent={handleOpenEvent}
               onSelectMedia={setLightboxMedia}
@@ -783,6 +910,20 @@ function MonteAppContent() {
             />
           )}
         </AppShell>
+      )}
+
+      {/* Guest Conversion Sign Up / Log In Modal */}
+      {authModal.open && (
+        <AuthPage
+          asModal
+          initialMode={authModal.mode}
+          contextMessage={authModal.message}
+          onCloseModal={() =>
+            setAuthModal({ open: false, mode: 'signup', message: null })
+          }
+          onLogin={handleLogin}
+          onShowToast={showToast}
+        />
       )}
 
       <MediaLightbox
