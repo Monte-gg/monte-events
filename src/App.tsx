@@ -315,16 +315,26 @@ function MonteAppContent() {
   const [typingByEvent] = useState<Record<string, string | null>>({});
 
   const [lightboxState, setLightboxState] = useState<{
-    item: MediaItem;
-    list: MediaItem[];
+    items: MediaItem[];
+    index: number;
   } | null>(null);
   const [toasts, setToasts] = useState<ToastData[]>([]);
 
   const handleSelectMedia = useCallback(
-    (item: MediaItem, list?: MediaItem[]) => {
+    (item: MediaItem, list?: MediaItem[], explicitIndex?: number) => {
+      const targetList = list && list.length > 0 ? list : media;
+      const resolvedIndex =
+        typeof explicitIndex === 'number' &&
+        explicitIndex >= 0 &&
+        explicitIndex < targetList.length
+          ? explicitIndex
+          : Math.max(
+              0,
+              targetList.findIndex((m) => m.id === item.id)
+            );
       setLightboxState({
-        item,
-        list: list && list.length > 0 ? list : media,
+        items: targetList,
+        index: resolvedIndex,
       });
     },
     [media]
@@ -940,10 +950,10 @@ function MonteAppContent() {
       )}
 
       <MediaLightbox
-        item={lightboxState?.item || null}
-        items={lightboxState?.list || []}
-        onNavigate={(nextItem) =>
-          setLightboxState((prev) => (prev ? { ...prev, item: nextItem } : null))
+        items={lightboxState?.items || []}
+        currentIndex={lightboxState ? lightboxState.index : -1}
+        onChangeIndex={(nextIndex) =>
+          setLightboxState((prev) => (prev ? { ...prev, index: nextIndex } : null))
         }
         onClose={() => setLightboxState(null)}
       />

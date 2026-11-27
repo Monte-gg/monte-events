@@ -11,7 +11,7 @@ interface MediaVaultPageProps {
   media: MediaItem[];
   user: UserProfile;
   onUploadMedia: (eventId: string, items: MediaItem[]) => void;
-  onSelectMedia: (item: MediaItem, filteredList?: MediaItem[]) => void;
+  onSelectMedia: (item: MediaItem, filteredList?: MediaItem[], index?: number) => void;
   onShowToast: (msg: string) => void;
 }
 
@@ -197,7 +197,7 @@ export const MediaVaultPage: React.FC<MediaVaultPageProps> = ({
           className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"
         >
         <AnimatePresence mode="popLayout">
-          {filtered.map((item) => (
+          {filtered.map((item, idx) => (
             <motion.button
               layout
               key={item.id}
@@ -208,7 +208,7 @@ export const MediaVaultPage: React.FC<MediaVaultPageProps> = ({
               whileHover={{ y: -3, scale: 1.02 }}
               whileTap={{ scale: 0.97 }}
               transition={{ duration: 0.24, ease: EASE_SKIPER }}
-              onClick={() => onSelectMedia(item, filtered)}
+              onClick={() => onSelectMedia(item, filtered, idx)}
               className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#0B2E8F] text-left shadow-sm"
             >
               <img

@@ -16,35 +16,38 @@ import { ThemeToggle } from './ThemeToggle';
 import { EASE_SKIPER, SPRING_POP, SPRING_SNAPPY } from './MotionPrimitives';
 
 interface MediaLightboxProps {
-  item: MediaItem | null;
-  items?: MediaItem[];
-  onNavigate?: (item: MediaItem) => void;
+  items: MediaItem[];
+  currentIndex: number;
+  onChangeIndex: (nextIndex: number) => void;
   onClose: () => void;
 }
 
 export const MediaLightbox: React.FC<MediaLightboxProps> = ({
-  item,
-  items = [],
-  onNavigate,
+  items,
+  currentIndex,
+  onChangeIndex,
   onClose,
 }) => {
   const [playing, setPlaying] = useState(false);
 
-  const currentIndex = item ? items.findIndex((i) => i.id === item.id) : -1;
-  const hasNav = items.length > 1 && currentIndex !== -1 && Boolean(onNavigate);
+  const item =
+    currentIndex >= 0 && currentIndex < items.length
+      ? items[currentIndex]
+      : null;
+  const hasNav = items.length > 1 && item !== null;
 
   const goPrev = () => {
-    if (!hasNav || !onNavigate) return;
+    if (!hasNav) return;
     const prevIdx = (currentIndex - 1 + items.length) % items.length;
     setPlaying(false);
-    onNavigate(items[prevIdx]);
+    onChangeIndex(prevIdx);
   };
 
   const goNext = () => {
-    if (!hasNav || !onNavigate) return;
+    if (!hasNav) return;
     const nextIdx = (currentIndex + 1) % items.length;
     setPlaying(false);
-    onNavigate(items[nextIdx]);
+    onChangeIndex(nextIdx);
   };
 
   useEffect(() => {
