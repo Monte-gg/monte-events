@@ -6,15 +6,14 @@ import {
   Images,
   LogIn,
   MessageCircle,
+  Plus,
   PlusCircle,
   User,
   Users,
 } from 'lucide-react';
 import { AppPage, UserProfile } from '../types';
-import { motion } from 'motion/react';
 import { MonteLogo } from './MonteLogo';
 import { ThemeToggle } from './ThemeToggle';
-import { SPRING_SNAPPY } from './MotionPrimitives';
 
 interface AppShellProps {
   currentPage: AppPage;
@@ -35,7 +34,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   onPromptAuth,
   children,
 }) => {
-  const navItems: {
+  const desktopNavItems: {
     id: AppPage;
     label: string;
     icon: React.ComponentType<{ className?: string }>;
@@ -57,12 +56,12 @@ export const AppShell: React.FC<AppShellProps> = ({
 
   return (
     <div
-      className={`bg-[#F0F6FF] dark:bg-[#0A1430] text-[#0A1E5C] dark:text-white flex transition-colors duration-300 ${
-        currentPage === 'chats' ? 'h-dvh overflow-hidden' : 'min-h-screen'
+      className={`bg-[#F0F6FF] dark:bg-[#0A1430] text-[#0A1E5C] dark:text-white flex overflow-x-clip transition-colors duration-300 ${
+        currentPage === 'chats' ? 'h-[100dvh] overflow-hidden' : 'min-h-[100dvh]'
       }`}
     >
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-64 xl:w-72 lg:fixed lg:inset-y-0 lg:left-0 z-30 border-r border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#0B1A3A] px-4 py-5 transition-colors duration-300">
+      {/* Desktop Left Sidebar (>= 768px) */}
+      <aside className="hidden md:flex md:flex-col md:w-60 lg:w-64 xl:w-72 md:fixed md:inset-y-0 md:left-0 z-30 border-r border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white dark:bg-[#0B1A3A] px-4 py-5 transition-colors duration-300">
         <div
           onClick={() => onNavigate('dashboard')}
           className="cursor-pointer flex items-center justify-center pb-5 border-b border-[#D6E6FF] dark:border-[#2B7FFF]/15"
@@ -71,7 +70,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         </div>
 
         <nav className="mt-6 flex-1 space-y-1.5">
-          {navItems.map((item) => {
+          {desktopNavItems.map((item) => {
             const Icon = item.icon;
             const active = isNavActive(item.id);
             return (
@@ -79,21 +78,14 @@ export const AppShell: React.FC<AppShellProps> = ({
                 key={item.id}
                 type="button"
                 onClick={() => onNavigate(item.id)}
-                className={`relative w-full flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-bold transition-colors ${
+                className={`relative w-full flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-bold transition-all duration-150 ${
                   active
-                    ? 'text-white'
-                    : 'text-[#0A1E5C]/75 dark:text-white/75 hover:bg-[#F0F6FF] dark:hover:bg-[#13224A] hover:text-[#1A6BFF] dark:hover:text-[#2B7FFF]'
+                    ? 'bg-[#1A6BFF] text-white shadow-monte'
+                    : 'text-[#0A1E5C]/80 dark:text-white/80 hover:bg-[#F0F6FF] dark:hover:bg-[#13224A] hover:text-[#1A6BFF] dark:hover:text-[#2B7FFF]'
                 }`}
               >
-                {active && (
-                  <motion.span
-                    layoutId="sidebar-active-pill"
-                    transition={SPRING_SNAPPY}
-                    className="absolute inset-0 rounded-2xl bg-[#1A6BFF] shadow-monte"
-                  />
-                )}
                 <span className="relative z-10 flex items-center gap-3">
-                  <Icon className="h-5 w-5" />
+                  <Icon className="h-5 w-5 shrink-0" />
                   <span>{item.label}</span>
                 </span>
                 {item.badge && item.badge > 0 ? (
@@ -175,37 +167,53 @@ export const AppShell: React.FC<AppShellProps> = ({
         </div>
       </aside>
 
-      {/* Main content area */}
+      {/* Main Content Area */}
       <div
-        className={`flex-1 lg:pl-64 xl:pl-72 flex flex-col w-full ${
-          currentPage === 'chats' ? 'h-dvh overflow-hidden' : 'min-h-screen'
+        className={`flex-1 md:pl-60 lg:pl-64 xl:pl-72 flex flex-col w-full min-w-0 overflow-x-clip ${
+          currentPage === 'chats' ? 'h-[100dvh] overflow-hidden' : 'min-h-[100dvh]'
         }`}
       >
-        {/* Mobile sticky brand bar (hidden on lg+) */}
-        <header className="lg:hidden sticky top-0 z-30 shrink-0 flex items-center justify-between border-b border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white/90 dark:bg-[#0B1A3A]/95 backdrop-blur-md px-4 py-2.5">
+        {/* Slim Sticky Mobile Top Header (< 768px) with iOS/Android safe-area-inset-top */}
+        <header className="md:hidden sticky top-0 z-30 shrink-0 flex items-center justify-between gap-2 border-b border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white/95 dark:bg-[#0B1A3A]/95 backdrop-blur-md px-3.5 py-2.5 pt-[calc(0.625rem+env(safe-area-inset-top))]">
           <button
             type="button"
             onClick={() => onNavigate('dashboard')}
-            className="flex items-center"
+            className="flex items-center min-w-0"
           >
             <MonteLogo size="xs" layout="horizontal" />
           </button>
-          <div className="flex items-center gap-2">
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => onNavigate('media')}
+              className={`flex h-9 w-9 items-center justify-center rounded-full border transition ${
+                currentPage === 'media'
+                  ? 'border-[#1A6BFF] bg-[#1A6BFF] text-white'
+                  : 'border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF] dark:bg-[#13224A] text-[#0A1E5C] dark:text-white'
+              }`}
+              aria-label="Open Media Vault"
+              title="Media Vault"
+            >
+              <Images className="h-4 w-4" />
+            </button>
+
             <ThemeToggle compact />
+
             {isGuestMode ? (
               <button
                 type="button"
                 onClick={() => onPromptAuth?.(undefined, 'login')}
-                className="inline-flex items-center gap-1 rounded-full bg-[#1A6BFF] hover:bg-[#2B7FFF] px-3 py-1.5 text-xs font-extrabold text-white transition"
+                className="inline-flex items-center gap-1 rounded-full bg-[#1A6BFF] hover:bg-[#2B7FFF] px-3 py-2 text-xs font-extrabold text-white shadow-sm transition active:scale-95"
               >
-                <LogIn className="h-3 w-3" />
+                <LogIn className="h-3.5 w-3.5" />
                 Sign In
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => onNavigate('profile')}
-                className="h-8 w-8 rounded-full overflow-hidden ring-2 ring-[#1A6BFF]/50 bg-[#1A6BFF] text-white flex items-center justify-center text-xs font-bold"
+                className="h-9 w-9 rounded-full overflow-hidden ring-2 ring-[#1A6BFF]/50 bg-[#1A6BFF] text-white flex items-center justify-center text-xs font-bold"
                 aria-label="Open profile"
               >
                 {user.avatarUrl ? (
@@ -222,12 +230,12 @@ export const AppShell: React.FC<AppShellProps> = ({
           </div>
         </header>
 
-        {/* Slim non-intrusive Guest Preview Banner */}
+        {/* Slim Guest Preview Banner */}
         {isGuestMode && (
-          <div className="shrink-0 border-b border-[#1A6BFF]/25 bg-gradient-to-r from-[#0B2E8F] via-[#1A6BFF] to-[#2B7FFF] px-4 py-2 text-white">
+          <div className="shrink-0 border-b border-[#1A6BFF]/25 bg-gradient-to-r from-[#0B2E8F] via-[#1A6BFF] to-[#2B7FFF] px-3.5 sm:px-4 py-2 text-white">
             <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 text-xs">
               <p className="font-semibold text-white/95">
-                <span className="font-extrabold">Preview Mode</span> — Sign in to create rooms, invite friends &amp; save your events
+                <span className="font-extrabold">Preview Mode</span> — Sign in to create rooms &amp; save events
               </p>
               <button
                 type="button"
@@ -237,7 +245,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                     'signup'
                   )
                 }
-                className="shrink-0 rounded-full bg-white text-[#0B2E8F] hover:bg-[#F0F6FF] px-3.5 py-1 text-[11px] font-extrabold shadow-xs transition active:scale-95"
+                className="shrink-0 rounded-full bg-white text-[#0B2E8F] hover:bg-[#F0F6FF] px-3 py-1 text-[11px] font-extrabold shadow-xs transition active:scale-95"
               >
                 Create Free Account
               </button>
@@ -248,52 +256,98 @@ export const AppShell: React.FC<AppShellProps> = ({
         <main
           className={
             currentPage === 'chats'
-              ? 'flex-1 min-h-0 overflow-hidden pb-[62px] lg:pb-0 flex flex-col'
-              : 'flex-1 pb-24 lg:pb-10'
+              ? 'flex-1 min-h-0 overflow-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0 flex flex-col'
+              : 'flex-1 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-8 overflow-x-clip'
           }
         >
           {children}
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white/95 dark:bg-[#0B1A3A]/95 backdrop-blur-lg px-2 py-1.5 transition-colors duration-300">
-        <div className="grid grid-cols-7 gap-0.5 max-w-lg mx-auto">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = isNavActive(item.id);
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onNavigate(item.id)}
-                className={`relative flex flex-col items-center justify-center rounded-xl py-1.5 px-1 transition-colors ${
-                  active
-                    ? 'text-[#1A6BFF] dark:text-[#2B7FFF]'
-                    : 'text-[#0A1E5C]/60 dark:text-white/60 hover:text-[#1A6BFF]'
-                }`}
-              >
-                {active && (
-                  <motion.span
-                    layoutId="mobile-nav-pill"
-                    transition={SPRING_SNAPPY}
-                    className="absolute inset-0 rounded-xl bg-[#F0F6FF] dark:bg-[#13224A]"
-                  />
-                )}
-                <div className="relative z-10">
-                  <Icon className="h-5 w-5" />
-                  {item.badge && item.badge > 0 ? (
-                    <span className="absolute -top-1.5 -right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#1A6BFF] dark:bg-[#2B7FFF] px-1 text-[10px] font-extrabold text-white">
-                      {item.badge}
-                    </span>
-                  ) : null}
-                </div>
-                <span className="relative z-10 mt-0.5 text-[10px] font-bold truncate max-w-full">
-                  {item.label}
+      {/* Native-Style 5-Tab Mobile Bottom Navigation Bar (< 768px) */}
+      <nav
+        aria-label="Mobile Navigation"
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white/95 dark:bg-[#0B1A3A]/95 backdrop-blur-lg px-2 pt-1.5 pb-[calc(0.45rem+env(safe-area-inset-bottom))] transition-colors duration-300"
+      >
+        <div className="grid grid-cols-5 items-center gap-1 max-w-md mx-auto">
+          {/* 1. Home */}
+          <button
+            type="button"
+            onClick={() => onNavigate('dashboard')}
+            className={`min-h-[48px] flex flex-col items-center justify-center rounded-xl px-1 transition-colors ${
+              isNavActive('dashboard')
+                ? 'text-[#1A6BFF] dark:text-[#2B7FFF]'
+                : 'text-[#0A1E5C]/65 dark:text-white/65'
+            }`}
+          >
+            <Home className="h-5 w-5" />
+            <span className="mt-0.5 text-[10px] font-extrabold">Home</span>
+          </button>
+
+          {/* 2. Rooms */}
+          <button
+            type="button"
+            onClick={() => onNavigate('rooms')}
+            className={`min-h-[48px] flex flex-col items-center justify-center rounded-xl px-1 transition-colors ${
+              isNavActive('rooms')
+                ? 'text-[#1A6BFF] dark:text-[#2B7FFF]'
+                : 'text-[#0A1E5C]/65 dark:text-white/65'
+            }`}
+          >
+            <CalendarRange className="h-5 w-5" />
+            <span className="mt-0.5 text-[10px] font-extrabold">Rooms</span>
+          </button>
+
+          {/* 3. + Create (Highlighted Royal-Blue Pill) */}
+          <button
+            type="button"
+            onClick={() => onNavigate('create')}
+            aria-label="Create Room"
+            className="min-h-[48px] flex flex-col items-center justify-center"
+          >
+            <span
+              className={`flex h-11 w-12 items-center justify-center rounded-2xl bg-[#1A6BFF] text-white shadow-monte transition active:scale-95 ${
+                currentPage === 'create' ? 'ring-2 ring-[#2B7FFF] ring-offset-2 dark:ring-offset-[#0B1A3A]' : ''
+              }`}
+            >
+              <Plus className="h-6 w-6 stroke-[2.8]" />
+            </span>
+          </button>
+
+          {/* 4. Chats */}
+          <button
+            type="button"
+            onClick={() => onNavigate('chats')}
+            className={`min-h-[48px] flex flex-col items-center justify-center rounded-xl px-1 transition-colors ${
+              isNavActive('chats')
+                ? 'text-[#1A6BFF] dark:text-[#2B7FFF]'
+                : 'text-[#0A1E5C]/65 dark:text-white/65'
+            }`}
+          >
+            <div className="relative">
+              <MessageCircle className="h-5 w-5" />
+              {totalUnreadChats > 0 && (
+                <span className="absolute -top-1.5 -right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#1A6BFF] dark:bg-[#2B7FFF] px-1 text-[9px] font-extrabold text-white">
+                  {totalUnreadChats}
                 </span>
-              </button>
-            );
-          })}
+              )}
+            </div>
+            <span className="mt-0.5 text-[10px] font-extrabold">Chats</span>
+          </button>
+
+          {/* 5. Profile */}
+          <button
+            type="button"
+            onClick={() => onNavigate('profile')}
+            className={`min-h-[48px] flex flex-col items-center justify-center rounded-xl px-1 transition-colors ${
+              isNavActive('profile')
+                ? 'text-[#1A6BFF] dark:text-[#2B7FFF]'
+                : 'text-[#0A1E5C]/65 dark:text-white/65'
+            }`}
+          >
+            <User className="h-5 w-5" />
+            <span className="mt-0.5 text-[10px] font-extrabold">Profile</span>
+          </button>
         </div>
       </nav>
     </div>

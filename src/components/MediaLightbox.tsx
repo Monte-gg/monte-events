@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Play,
   Pause,
@@ -73,7 +74,9 @@ export const MediaLightbox: React.FC<MediaLightboxProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [item, currentIndex, items.length]);
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       {item && (
         <motion.div
@@ -82,7 +85,7 @@ export const MediaLightbox: React.FC<MediaLightboxProps> = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-[#0A1430]/80 backdrop-blur-md p-4"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0A1430]/80 backdrop-blur-md p-3 sm:p-4"
           onClick={onClose}
         >
           <motion.div
@@ -91,7 +94,7 @@ export const MediaLightbox: React.FC<MediaLightboxProps> = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 8 }}
             transition={SPRING_SNAPPY}
-            className="w-full max-w-2xl overflow-hidden rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] shadow-2xl"
+            className="w-full max-w-2xl max-h-[92dvh] overflow-y-auto rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header with ThemeToggle */}
@@ -249,6 +252,7 @@ export const MediaLightbox: React.FC<MediaLightboxProps> = ({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };

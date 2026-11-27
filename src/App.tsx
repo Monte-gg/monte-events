@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MotionConfig } from 'motion/react';
 import { ThemeProvider } from './context/ThemeContext';
 import { supabase } from './lib/supabase';
@@ -115,6 +115,11 @@ function detectResetPasswordFromUrl(): boolean {
 function MonteAppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isGuestMode, setIsGuestMode] = useState(false);
+  const isGuestModeRef = useRef(false);
+  const apiOnlineRef = useRef(false);
+  useEffect(() => {
+    isGuestModeRef.current = isGuestMode;
+  }, [isGuestMode]);
   const [showResetPasswordModal, setShowResetPasswordModal] = useState<boolean>(
     () => detectResetPasswordFromUrl()
   );
@@ -255,15 +260,20 @@ function MonteAppContent() {
           connected: synced.connected,
           schemaReady: synced.schemaReady,
         });
-        if (synced.events && synced.events.length > 0) {
-          setEvents(synced.events);
+        if (synced.events && synced.events.length > 0 && !isGuestModeRef.current && !apiOnlineRef.current) {
+          setEvents((prev) => {
+            // Preserve any locally created optimistic rooms not yet in Supabase events table
+            const syncedCodes = new Set(synced.events!.map((e) => e.inviteCode));
+            const localOnly = prev.filter(
+              (e) => e.id.startsWith('evt-') && !syncedCodes.has(e.inviteCode)
+            );
+            return [...localOnly, ...synced.events!];
+          });
           setActiveEventId((curr) =>
-            synced.events!.some((e) => e.id === curr) ? curr : synced.events![0].id
+            curr ? curr : synced.events![0].id
           );
           setActiveChatEventId((curr) =>
-            curr && synced.events!.some((e) => e.id === curr)
-              ? curr
-              : synced.events![0].id
+            curr ? curr : synced.events![0].id
           );
         }
         if (synced.media && synced.media.length > 0) {
@@ -307,24 +317,35 @@ function MonteAppContent() {
         return;
       }
       setApiStatus('online');
+      apiOnlineRef.current = true;
 
       const [apiRooms, apiMedia, apiMembers] = await Promise.all([
         fetchRoomsFromApi(),
         fetchMediaFromApi(),
         fetchMembersFromApi(),
       ]);
-      if (!mounted) return;
+      if (!mounted || isGuestModeRef.current) return;
       if (apiMembers) {
         setMembers(apiMembers);
       }
 
       if (apiRooms && apiRooms.length > 0) {
-        setEvents(apiRooms);
+        setEvents((prev) => {
+          const apiCodes = new Set(apiRooms.map((e) => e.inviteCode));
+          const localOnly = prev.filter(
+            (e) => e.id.startsWith('evt-') && !apiCodes.has(e.inviteCode)
+          );
+          return [...localOnly, ...apiRooms];
+        });
         setActiveEventId((curr) =>
-          apiRooms.some((e) => e.id === curr) ? curr : apiRooms[0].id
+          curr && (apiRooms.some((e) => e.id === curr) || curr.startsWith('evt-'))
+            ? curr
+            : apiRooms[0].id
         );
         setActiveChatEventId((curr) =>
-          curr && apiRooms.some((e) => e.id === curr) ? curr : apiRooms[0].id
+          curr && (apiRooms.some((e) => e.id === curr) || curr.startsWith('evt-'))
+            ? curr
+            : apiRooms[0].id
         );
 
         // Fetch per-room messages in parallel
@@ -683,11 +704,33 @@ function MonteAppContent() {
     void createRoomOnApi(newEvent).then((savedRoom) => {
       if (!savedRoom) return;
       setApiStatus('online');
+      apiOnlineRef.current = true;
+      const mergedRoom: MonteEvent = {
+        ...newEvent,
+        ...savedRoom,
+        activities:
+          savedRoom.activities && savedRoom.activities.length > 0
+            ? savedRoom.activities
+            : newEvent.activities,
+        mainGuests:
+          savedRoom.mainGuests && savedRoom.mainGuests.length > 0
+            ? savedRoom.mainGuests
+            : newEvent.mainGuests,
+        subEvents:
+          savedRoom.subEvents && savedRoom.subEvents.length > 0
+            ? savedRoom.subEvents
+            : newEvent.subEvents,
+        locationPinUrl: savedRoom.locationPinUrl || newEvent.locationPinUrl,
+        expenses:
+          savedRoom.expenses && savedRoom.expenses.length > 0
+            ? savedRoom.expenses
+            : newEvent.expenses,
+      };
       setEvents((prev) =>
-        prev.map((ev) => (ev.id === newEvent.id ? savedRoom : ev))
+        prev.map((ev) => (ev.id === newEvent.id ? mergedRoom : ev))
       );
-      setActiveEventId((curr) => (curr === newEvent.id ? savedRoom.id : curr));
-      setFlyerEvent((curr) => (curr && curr.id === newEvent.id ? savedRoom : curr));
+      setActiveEventId((curr) => (curr === newEvent.id ? mergedRoom.id : curr));
+      setFlyerEvent((curr) => (curr && curr.id === newEvent.id ? mergedRoom : curr));
       setMessagesByEvent((prev) => {
         const existing = prev[newEvent.id] || [welcomeMsg];
         const next = { ...prev };
@@ -1104,7 +1147,7 @@ function MonteAppContent() {
   const handleSendDirectMessage = (friendId: string, text: string) => {
     if (isGuestMode) {
       promptGuestToSignUp(
-        'Sign in to chat with your friends and plan events together.'
+        'Create a free account to chat with friends and coordinate events.'
       );
       return;
     }
@@ -1182,7 +1225,7 @@ function MonteAppContent() {
   ) => {
     if (isGuestMode) {
       promptGuestToSignUp(
-        'Sign in to chat with your event squad and share updates.'
+        'Create a free account to chat with friends and coordinate events.'
       );
       return;
     }

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowRight,
   Camera,
@@ -283,7 +284,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     return (
       <div
         onMouseMove={handleSplashMouseMove}
-        className="relative min-h-screen w-full overflow-hidden bg-gradient-to-br from-[#F0F6FF] via-white to-[#D6E6FF] dark:from-[#0A1430] dark:via-[#0B1A3A] dark:to-[#0B2E8F]/40 flex flex-col items-center justify-center px-6 py-10 transition-colors duration-300"
+        className="relative min-h-[100dvh] w-full overflow-x-clip bg-gradient-to-br from-[#F0F6FF] via-white to-[#D6E6FF] dark:from-[#0A1430] dark:via-[#0B1A3A] dark:to-[#0B2E8F]/40 flex flex-col items-center justify-center px-5 py-10 pt-[calc(2.5rem+env(safe-area-inset-top))] pb-[calc(2.5rem+env(safe-area-inset-bottom))] transition-colors duration-300"
       >
         <div className="pointer-events-none absolute -top-24 -left-24 h-80 w-80 rounded-full bg-[#1A6BFF]/15 blur-3xl dark:bg-[#2B7FFF]/20" />
         <div className="pointer-events-none absolute -bottom-24 -right-24 h-96 w-96 rounded-full bg-[#2B7FFF]/20 blur-3xl dark:bg-[#1A6BFF]/20" />
@@ -758,26 +759,28 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   );
 
   if (asModal) {
-    return (
+    if (typeof document === 'undefined') return null;
+    return createPortal(
       <div
-        className="fixed inset-0 z-[95] flex items-center justify-center bg-[#0A1430]/75 backdrop-blur-sm p-4"
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0A1430]/75 backdrop-blur-sm p-4"
         onClick={onCloseModal}
       >
         <motion.div
           initial={{ opacity: 0, scale: 0.94, y: 12 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={SPRING_SNAPPY}
-          className="w-full max-w-md max-h-[92vh] overflow-y-auto"
+          className="w-full max-w-md max-h-[92dvh] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
           {AuthCardContent}
         </motion.div>
-      </div>
+      </div>,
+      document.body
     );
   }
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden bg-gradient-to-br from-[#F0F6FF] via-white to-[#D6E6FF] dark:from-[#0A1430] dark:via-[#0B1A3A] dark:to-[#0A1430] flex flex-col items-center justify-center px-4 py-8">
+    <div className="relative min-h-[100dvh] w-full overflow-x-clip bg-gradient-to-br from-[#F0F6FF] via-white to-[#D6E6FF] dark:from-[#0A1430] dark:via-[#0B1A3A] dark:to-[#0A1430] flex flex-col items-center justify-center px-4 py-8 pt-[calc(2rem+env(safe-area-inset-top))] pb-[calc(2rem+env(safe-area-inset-bottom))]">
       <div className="pointer-events-none absolute -top-28 -right-28 h-80 w-80 rounded-full bg-[#1A6BFF]/15 blur-3xl dark:bg-[#2B7FFF]/15" />
       <div className="pointer-events-none absolute -bottom-28 -left-28 h-80 w-80 rounded-full bg-[#0B2E8F]/10 blur-3xl dark:bg-[#1A6BFF]/15" />
 

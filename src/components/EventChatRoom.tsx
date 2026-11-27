@@ -186,9 +186,9 @@ export const EventChatRoom: React.FC<EventChatRoomProps> = ({
             <button
               type="button"
               onClick={onBack}
-              className="lg:hidden rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-2.5 py-1.5 text-xs font-bold text-[#0A1E5C] dark:text-white"
+              className="md:hidden rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-2.5 py-1.5 text-xs font-bold text-[#0A1E5C] dark:text-white"
             >
-              Back
+              ← Back
             </button>
           )}
           <div className="relative h-10 w-10 shrink-0 rounded-2xl bg-gradient-to-br from-[#0B2E8F] to-[#2B7FFF] flex items-center justify-center text-white font-extrabold text-sm shadow">

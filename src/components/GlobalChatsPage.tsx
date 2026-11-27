@@ -81,11 +81,7 @@ export const GlobalChatsPage: React.FC<GlobalChatsPageProps> = ({
   onShowToast,
 }) => {
   const [search, setSearch] = useState('');
-  const [mobileShowChat, setMobileShowChat] = useState(
-    Boolean(
-      activeChatSection === 'friends' ? activeFriendId : activeChatEventId
-    )
-  );
+  const [mobileShowChat, setMobileShowChat] = useState(false);
   const [dmText, setDmText] = useState('');
   const [showDmEmoji, setShowDmEmoji] = useState(false);
   const dmBottomRef = useRef<HTMLDivElement>(null);
@@ -149,8 +145,8 @@ export const GlobalChatsPage: React.FC<GlobalChatsPageProps> = ({
       <div className="flex-1 min-h-0 flex gap-3 overflow-hidden">
         {/* Left: Events & Friends Chat List Sidebar */}
         <div
-          className={`w-full lg:w-72 xl:w-80 shrink-0 h-full min-h-0 flex flex-col rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] overflow-hidden shadow-sm ${
-            mobileShowChat ? 'hidden lg:flex' : 'flex'
+          className={`w-full md:w-72 xl:w-80 shrink-0 h-full min-h-0 flex flex-col rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] overflow-hidden shadow-sm ${
+            mobileShowChat ? 'hidden md:flex' : 'flex'
           }`}
         >
           <div className="shrink-0 p-3.5 border-b border-[#D6E6FF] dark:border-[#2B7FFF]/20 space-y-2.5">
@@ -369,7 +365,7 @@ export const GlobalChatsPage: React.FC<GlobalChatsPageProps> = ({
         {/* Right: Active Event Chat Room OR Direct Friend Chat */}
         <div
           className={`flex-1 min-w-0 h-full min-h-0 ${
-            mobileShowChat ? 'flex flex-col' : 'hidden lg:flex lg:flex-col'
+            mobileShowChat ? 'flex flex-col' : 'hidden md:flex md:flex-col'
           }`}
         >
           {activeChatSection === 'events' ? (
@@ -406,9 +402,9 @@ export const GlobalChatsPage: React.FC<GlobalChatsPageProps> = ({
                   <button
                     type="button"
                     onClick={() => setMobileShowChat(false)}
-                    className="lg:hidden rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-2.5 py-1.5 text-xs font-bold text-[#0A1E5C] dark:text-white"
+                    className="md:hidden rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-2.5 py-1.5 text-xs font-bold text-[#0A1E5C] dark:text-white"
                   >
-                    Back
+                    ← Back
                   </button>
                   <button
                     type="button"

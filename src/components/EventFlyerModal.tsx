@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import QRCode from 'qrcode';
 import {
   Calendar,
@@ -6,6 +7,9 @@ import {
   Check,
   Copy,
   Download,
+  FileImage,
+  FileText,
+  FileType,
   Loader2,
   MapPin,
   Mic2,
@@ -92,11 +96,11 @@ function loadImageForCanvas(src: string): Promise<HTMLImageElement | null> {
   });
 }
 
-async function generateFlyerPng(
+async function renderFlyerCanvas(
   event: MonteEvent,
   style: FlyerStyle,
   qrDataUrl: string
-): Promise<Blob | null> {
+): Promise<HTMLCanvasElement | null> {
   const W = 1080;
   const H = 1350;
   const canvas = document.createElement('canvas');
@@ -110,15 +114,15 @@ async function generateFlyerPng(
   const primaryBlue = '#2563EB';
   const textMain = isDark ? '#FFFFFF' : '#081128';
   const textMuted = isDark ? '#93C5FD' : '#1E40AF';
-  const cardBg = isDark ? 'rgba(15, 29, 64, 0.86)' : 'rgba(255, 255, 255, 0.94)';
-  const cardBorder = isDark ? 'rgba(37, 99, 235, 0.42)' : 'rgba(37, 99, 235, 0.28)';
+  const cardBg = isDark ? 'rgba(15, 29, 64, 0.86)' : 'rgba(255, 255, 255, 0.96)';
+  const cardBorder = isDark ? 'rgba(37, 99, 235, 0.42)' : 'rgba(37, 99, 235, 0.3)';
 
   // 1. Base Background
   ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, W, H);
 
-  // 2. Top Half Cover Photo (520px tall) with gradient fade into background
-  const heroH = 540;
+  // 2. Top Half Cover Photo with gradient fade
+  const heroH = 530;
   const heroGrad = ctx.createLinearGradient(0, 0, W, heroH);
   heroGrad.addColorStop(0, '#0B2E8F');
   heroGrad.addColorStop(1, '#2563EB');
@@ -151,7 +155,6 @@ async function generateFlyerPng(
     ctx.restore();
   }
 
-  // Smooth fade from cover photo into #081128 (or #F4F8FF)
   const topFade = ctx.createLinearGradient(0, 0, 0, heroH);
   topFade.addColorStop(0, 'rgba(8, 17, 40, 0.62)');
   topFade.addColorStop(0.45, 'rgba(8, 17, 40, 0.18)');
@@ -160,7 +163,6 @@ async function generateFlyerPng(
   ctx.fillStyle = topFade;
   ctx.fillRect(0, 0, W, heroH + 4);
 
-  // Subtle electric-blue radial ambient glow
   const glow = ctx.createRadialGradient(W * 0.85, 620, 20, W * 0.85, 620, 440);
   glow.addColorStop(0, isDark ? 'rgba(37, 99, 235, 0.25)' : 'rgba(37, 99, 235, 0.12)');
   glow.addColorStop(1, 'rgba(37, 99, 235, 0)');
@@ -172,7 +174,6 @@ async function generateFlyerPng(
   // 3. Top-Left Circular Orbital "M" + MONTE EVENTS Badge
   const cx = padX + 38;
   const cy = 96;
-  // Orbital rings
   ctx.save();
   ctx.strokeStyle = 'rgba(147, 197, 253, 0.65)';
   ctx.lineWidth = 2.5;
@@ -181,7 +182,6 @@ async function generateFlyerPng(
   ctx.stroke();
   ctx.restore();
 
-  // Inner circle
   ctx.fillStyle = primaryBlue;
   ctx.beginPath();
   ctx.arc(cx, cy, 32, 0, Math.PI * 2);
@@ -217,33 +217,33 @@ async function generateFlyerPng(
 
   // 5. Bold Uppercase Event Title + Hosted By
   ctx.textAlign = 'left';
-  let y = 455;
+  let y = 445;
   ctx.fillStyle = textMain;
-  ctx.font = '900 60px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.font = '900 58px system-ui, -apple-system, Segoe UI, sans-serif';
   const titleLines = wrapCanvasText(ctx, event.name.toUpperCase(), W - padX * 2, 2);
   for (const line of titleLines) {
     ctx.fillText(line, padX, y);
-    y += 68;
+    y += 66;
   }
 
   ctx.fillStyle = textMuted;
-  ctx.font = '700 23px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.font = '700 22px system-ui, -apple-system, Segoe UI, sans-serif';
   ctx.fillText(`HOSTED BY ${event.createdBy.toUpperCase()}`, padX, y + 6);
-  y += 46;
+  y += 44;
 
-  // 6. 2x2 Glassmorphic Detail Grid
+  // 6. 2x2 Glassmorphic Detail Grid (taller boxes so Location wraps neatly to 2 lines)
   const gap = 18;
   const boxW = (W - padX * 2 - gap) / 2;
-  const boxH = 92;
+  const boxH = 104;
   const spotsText = event.mpesaNumber
     ? `${event.maxGuests.toLocaleString()} Spots • M-PESA Ready`
     : `${event.maxGuests.toLocaleString()} Spots Available`;
 
   const gridItems = [
-    { label: 'DATE', value: formatDateShort(event.date) },
-    { label: 'LOCATION', value: event.location },
-    { label: 'KES / PERSON', value: formatKES(event.costPerPerson) },
-    { label: 'CAPACITY & PAY', value: spotsText },
+    { label: 'DATE', value: formatDateShort(event.date), maxLines: 1 },
+    { label: 'LOCATION', value: event.location, maxLines: 2 },
+    { label: 'KES / PERSON', value: formatKES(event.costPerPerson), maxLines: 1 },
+    { label: 'SPOTS & PAY', value: spotsText, maxLines: 2 },
   ];
 
   gridItems.forEach((item, i) => {
@@ -259,105 +259,106 @@ async function generateFlyerPng(
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Small blue dot/icon accent
     ctx.fillStyle = primaryBlue;
     ctx.beginPath();
-    ctx.arc(bx + 26, by + 28, 6, 0, Math.PI * 2);
+    ctx.arc(bx + 26, by + 26, 6, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = textMuted;
     ctx.font = '800 15px system-ui, -apple-system, Segoe UI, sans-serif';
-    ctx.fillText(item.label, bx + 42, by + 29);
+    ctx.fillText(item.label, bx + 42, by + 27);
 
     ctx.fillStyle = textMain;
-    ctx.font = '800 24px system-ui, -apple-system, Segoe UI, sans-serif';
-    const val = wrapCanvasText(ctx, item.value, boxW - 44, 1)[0] || item.value;
-    ctx.fillText(val, bx + 22, by + 65);
+    ctx.font = '800 22px system-ui, -apple-system, Segoe UI, sans-serif';
+    const valLines = wrapCanvasText(ctx, item.value, boxW - 44, item.maxLines);
+    valLines.forEach((vl, li) => {
+      ctx.fillText(vl, bx + 22, by + 58 + li * 26);
+    });
   });
 
-  y += boxH * 2 + gap + 26;
+  y += boxH * 2 + gap + 24;
 
-  // 7. MAIN GUESTS / HEADLINERS (if any)
+  // 7. MAIN GUESTS / HEADLINERS
   const mainGuests = event.mainGuests || [];
   if (mainGuests.length > 0) {
     ctx.fillStyle = textMuted;
     ctx.font = '900 16px system-ui, -apple-system, Segoe UI, sans-serif';
     ctx.fillText('FEATURING / MAIN GUESTS', padX, y);
-    y += 18;
+    y += 16;
 
     let px = padX;
     for (const mg of mainGuests.slice(0, 4)) {
       const label = `${mg.name} (${mg.role})`;
-      ctx.font = '800 19px system-ui, -apple-system, Segoe UI, sans-serif';
-      const pillW = Math.min(ctx.measureText(label).width + 34, W - padX * 2);
+      ctx.font = '800 18px system-ui, -apple-system, Segoe UI, sans-serif';
+      const pillW = Math.min(ctx.measureText(label).width + 32, W - padX * 2);
       if (px + pillW > W - padX) {
         px = padX;
-        y += 46;
+        y += 44;
       }
       ctx.fillStyle = isDark ? 'rgba(37, 99, 235, 0.25)' : 'rgba(37, 99, 235, 0.12)';
-      drawRoundedRect(ctx, px, y, pillW, 38, 19);
+      drawRoundedRect(ctx, px, y, pillW, 36, 18);
       ctx.fill();
       ctx.strokeStyle = primaryBlue;
       ctx.lineWidth = 1.8;
       ctx.stroke();
 
       ctx.fillStyle = textMain;
-      ctx.fillText(label, px + 17, y + 20);
-      px += pillW + 12;
+      ctx.fillText(label, px + 16, y + 19);
+      px += pillW + 10;
     }
-    y += 58;
+    y += 52;
   }
 
-  // 8. ACTIVITIES (Glowing Blue-Bordered Glassmorphic Pills — hidden if empty)
+  // 8. ACTIVITIES
   const activities = event.activities || [];
   if (activities.length > 0) {
     ctx.fillStyle = textMuted;
     ctx.font = '900 16px system-ui, -apple-system, Segoe UI, sans-serif';
     ctx.fillText('ACTIVITIES', padX, y);
-    y += 18;
+    y += 16;
 
     let px = padX;
     for (const act of activities.slice(0, 6)) {
-      ctx.font = '800 19px system-ui, -apple-system, Segoe UI, sans-serif';
-      const pillW = ctx.measureText(act).width + 36;
+      ctx.font = '800 18px system-ui, -apple-system, Segoe UI, sans-serif';
+      const pillW = ctx.measureText(act).width + 34;
       if (px + pillW > W - padX) {
         px = padX;
-        y += 48;
+        y += 46;
       }
       ctx.fillStyle = isDark ? 'rgba(15, 29, 64, 0.9)' : '#FFFFFF';
-      drawRoundedRect(ctx, px, y, pillW, 40, 20);
+      drawRoundedRect(ctx, px, y, pillW, 38, 19);
       ctx.fill();
       ctx.strokeStyle = primaryBlue;
       ctx.lineWidth = 2;
       ctx.stroke();
 
       ctx.fillStyle = isDark ? '#DBEAFE' : '#1D4ED8';
-      ctx.fillText(act, px + 18, y + 21);
-      px += pillW + 12;
+      ctx.fillText(act, px + 17, y + 20);
+      px += pillW + 10;
     }
-    y += 58;
+    y += 52;
   }
 
-  // 9. MULTI-EVENT SCHEDULE (if 2+ events added to room)
+  // 9. MULTI-EVENT SCHEDULE
   const subEvents = event.subEvents || [];
   if (subEvents.length > 0 && y < 1030) {
     ctx.fillStyle = textMuted;
     ctx.font = '900 16px system-ui, -apple-system, Segoe UI, sans-serif';
     ctx.fillText('EVENT LINEUP IN THIS ROOM', padX, y);
-    y += 24;
+    y += 22;
     for (const se of subEvents.slice(0, 2)) {
       const line = `• ${se.title} (${formatDateShort(se.date)}${se.time ? ` • ${se.time}` : ''})`;
       ctx.fillStyle = textMain;
-      ctx.font = '700 19px system-ui, -apple-system, Segoe UI, sans-serif';
+      ctx.font = '700 18px system-ui, -apple-system, Segoe UI, sans-serif';
       const clipped = wrapCanvasText(ctx, line, W - padX * 2, 1)[0] || line;
       ctx.fillText(clipped, padX, y);
-      y += 28;
+      y += 26;
     }
   }
 
-  // 10. Bottom Dark-Blue QR Card (fixed cleanly at bottom)
-  const qrCardH = 210;
-  const qrCardY = H - qrCardH - 48;
+  // 10. Bottom Dark-Blue QR Card
+  const qrCardH = 205;
+  const qrCardY = H - qrCardH - 44;
   ctx.fillStyle = isDark ? '#0D1C42' : '#081128';
   drawRoundedRect(ctx, padX, qrCardY, W - padX * 2, qrCardH, 28);
   ctx.fill();
@@ -365,8 +366,7 @@ async function generateFlyerPng(
   ctx.lineWidth = 2.5;
   ctx.stroke();
 
-  // QR Code Image on Left
-  const qrBoxSize = 162;
+  const qrBoxSize = 158;
   const qrX = padX + 24;
   const qrY = qrCardY + (qrCardH - qrBoxSize) / 2;
   ctx.fillStyle = '#FFFFFF';
@@ -378,38 +378,174 @@ async function generateFlyerPng(
     ctx.drawImage(qrImg, qrX + 8, qrY + 8, qrBoxSize - 16, qrBoxSize - 16);
   }
 
-  // Right side of QR card
-  const infoX = qrX + qrBoxSize + 34;
+  const infoX = qrX + qrBoxSize + 32;
   ctx.textAlign = 'left';
   ctx.fillStyle = '#93C5FD';
-  ctx.font = '800 17px system-ui, -apple-system, Segoe UI, sans-serif';
-  ctx.fillText('SCAN TO JOIN & RSVP INSTANTLY', infoX, qrCardY + 46);
+  ctx.font = '800 16px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.fillText('SCAN TO JOIN & RSVP INSTANTLY', infoX, qrCardY + 44);
 
   ctx.fillStyle = '#FFFFFF';
-  ctx.font = '900 32px system-ui, -apple-system, Segoe UI, sans-serif';
-  ctx.fillText(`JOIN ROOM: ${event.inviteCode}`, infoX, qrCardY + 88);
+  ctx.font = '900 31px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.fillText(`JOIN ROOM: ${event.inviteCode}`, infoX, qrCardY + 85);
 
-  // Electric-blue RSVP & PAY VIA MONTE pill
   const rsvpText = 'RSVP & PAY VIA MONTE';
-  ctx.font = '900 18px system-ui, -apple-system, Segoe UI, sans-serif';
-  const rsvpW = ctx.measureText(rsvpText).width + 38;
+  ctx.font = '900 17px system-ui, -apple-system, Segoe UI, sans-serif';
+  const rsvpW = ctx.measureText(rsvpText).width + 36;
   ctx.fillStyle = primaryBlue;
-  drawRoundedRect(ctx, infoX, qrCardY + 112, rsvpW, 40, 20);
+  drawRoundedRect(ctx, infoX, qrCardY + 109, rsvpW, 38, 19);
   ctx.fill();
   ctx.fillStyle = '#FFFFFF';
-  ctx.fillText(rsvpText, infoX + 19, qrCardY + 133);
+  ctx.fillText(rsvpText, infoX + 18, qrCardY + 129);
 
   ctx.fillStyle = 'rgba(255,255,255,0.75)';
-  ctx.font = '600 18px system-ui, -apple-system, Segoe UI, sans-serif';
-  ctx.fillText('monte-gg.github.io/monte-events', infoX, qrCardY + 178);
+  ctx.font = '600 17px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.fillText('monte-gg.github.io/monte-events', infoX, qrCardY + 174);
 
-  return new Promise((resolve) => {
-    try {
-      canvas.toBlob((blob) => resolve(blob), 'image/png', 0.96);
-    } catch {
-      resolve(null);
-    }
-  });
+  return canvas;
+}
+
+/**
+ * Build a clean, standards-compliant single-page PDF embedding the 1080x1350 JPEG flyer.
+ * Zero external libraries required — opens cleanly in Chrome, Safari, Adobe, iOS & Android.
+ */
+function buildSinglePageJpegPdf(jpegBytes: Uint8Array, imgW: number, imgH: number): Blob {
+  // 4:5 page size in PDF points (576 x 720 pt = 8 x 10 in)
+  const pageW = 576;
+  const pageH = 720;
+  const encoder = new TextEncoder();
+  const chunks: Uint8Array[] = [];
+  const offsets: number[] = [0];
+  let byteLength = 0;
+
+  const pushStr = (s: string) => {
+    const b = encoder.encode(s);
+    chunks.push(b);
+    byteLength += b.length;
+  };
+  const pushBytes = (b: Uint8Array) => {
+    chunks.push(b);
+    byteLength += b.length;
+  };
+  const startObj = (num: number) => {
+    offsets[num] = byteLength;
+    pushStr(`${num} 0 obj\n`);
+  };
+
+  pushStr('%PDF-1.4\n%\xFF\xFF\xFF\xFF\n');
+
+  // 1: Catalog
+  startObj(1);
+  pushStr('<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+
+  // 2: Pages
+  startObj(2);
+  pushStr('<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n');
+
+  // 3: Page
+  startObj(3);
+  pushStr(
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`
+  );
+
+  // 4: Image XObject (DCTDecode = JPEG)
+  startObj(4);
+  pushStr(
+    `<< /Type /XObject /Subtype /Image /Width ${imgW} /Height ${imgH} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`
+  );
+  pushBytes(jpegBytes);
+  pushStr('\nendstream\nendobj\n');
+
+  // 5: Page Content Stream
+  const contentStream = `q\n${pageW} 0 0 ${pageH} 0 0 cm\n/Im0 Do\nQ\n`;
+  startObj(5);
+  pushStr(`<< /Length ${contentStream.length} >>\nstream\n${contentStream}endstream\nendobj\n`);
+
+  // xref
+  const xrefPos = byteLength;
+  pushStr('xref\n0 6\n0000000000 65535 f \n');
+  for (let i = 1; i <= 5; i++) {
+    pushStr(`${String(offsets[i]).padStart(10, '0')} 00000 n \n`);
+  }
+  pushStr(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF`);
+
+  const merged = new Uint8Array(byteLength);
+  let pos = 0;
+  for (const c of chunks) {
+    merged.set(c, pos);
+    pos += c.length;
+  }
+  return new Blob([merged], { type: 'application/pdf' });
+}
+
+function buildWordDocBlob(event: MonteEvent, flyerPngDataUrl: string, inviteUrl: string): Blob {
+  const esc = (s: string) =>
+    String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+  const activitiesHtml =
+    event.activities && event.activities.length > 0
+      ? `<p><strong>Activities:</strong> ${event.activities.map(esc).join(' • ')}</p>`
+      : '';
+  const mainGuestsHtml =
+    event.mainGuests && event.mainGuests.length > 0
+      ? `<p><strong>Featuring / Main Guests:</strong> ${event.mainGuests
+          .map((mg) => `${esc(mg.name)} (${esc(mg.role)})`)
+          .join(', ')}</p>`
+      : '';
+  const subEventsHtml =
+    event.subEvents && event.subEvents.length > 0
+      ? `<h3>Room Schedule</h3><ul>${event.subEvents
+          .map(
+            (se) =>
+              `<li><strong>${esc(se.title)}</strong> — ${esc(formatDateShort(se.date))}${
+                se.time ? ` at ${esc(se.time)}` : ''
+              }${se.location ? ` (${esc(se.location)})` : ''}</li>`
+          )
+          .join('')}</ul>`
+      : '';
+  const mpesaHtml = event.mpesaNumber
+    ? `<p><strong>M-PESA Payment:</strong> ${esc(event.mpesaNumber)}${
+        event.mpesaAccount ? ` (Acc: ${esc(event.mpesaAccount)})` : ''
+      }${event.mpesaName ? ` — ${esc(event.mpesaName)}` : ''}</p>`
+    : '';
+
+  const html = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8" />
+<title>${esc(event.name)} — MONTE EVENTS Flyer</title>
+<style>
+  body { font-family: Arial, sans-serif; color: #081128; margin: 24px; }
+  .poster { text-align: center; margin-bottom: 20px; }
+  .poster img { width: 540px; max-width: 100%; border-radius: 12px; }
+  h1 { color: #0B2E8F; margin-bottom: 6px; }
+  .meta { background: #F0F6FF; border: 1px solid #D6E6FF; padding: 14px; border-radius: 10px; }
+</style>
+</head>
+<body>
+  <div class="poster">
+    <img src="${flyerPngDataUrl}" alt="${esc(event.name)} Event Flyer" />
+  </div>
+  <h1>${esc(event.name)}</h1>
+  <div class="meta">
+    <p><strong>Category:</strong> ${esc(event.customType || event.type)}</p>
+    <p><strong>Hosted By:</strong> ${esc(event.createdBy)}</p>
+    <p><strong>Date:</strong> ${esc(formatDateShort(event.date))}</p>
+    <p><strong>Location:</strong> ${esc(event.location)}</p>
+    <p><strong>Cost / Person:</strong> ${esc(formatKES(event.costPerPerson))} (${event.maxGuests.toLocaleString()} Spots)</p>
+    ${mpesaHtml}
+    ${mainGuestsHtml}
+    ${activitiesHtml}
+    ${subEventsHtml}
+    <p><strong>Join Room Code:</strong> ${esc(event.inviteCode)}</p>
+    <p><strong>RSVP Link:</strong> <a href="${esc(inviteUrl)}">${esc(inviteUrl)}</a></p>
+  </div>
+</body>
+</html>`;
+
+  return new Blob(['\ufeff', html], { type: 'application/msword' });
 }
 
 export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
@@ -419,7 +555,9 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
 }) => {
   const [flyerStyle, setFlyerStyle] = useState<FlyerStyle>('midnight');
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
-  const [downloading, setDownloading] = useState(false);
+  const [downloadingFormat, setDownloadingFormat] = useState<
+    null | 'png' | 'pdf' | 'doc'
+  >(null);
   const [sharing, setSharing] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -431,17 +569,13 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
     [event]
   );
 
-  // Generate real scannable QR code whenever event changes
   useEffect(() => {
     if (!inviteUrl) return;
     let active = true;
     QRCode.toDataURL(inviteUrl, {
       width: 320,
       margin: 1,
-      color: {
-        dark: '#081128',
-        light: '#FFFFFF',
-      },
+      color: { dark: '#081128', light: '#FFFFFF' },
     })
       .then((url) => {
         if (active) setQrDataUrl(url);
@@ -463,11 +597,28 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [event, onClose]);
 
-  if (!event) return null;
+  if (!event || typeof document === 'undefined') return null;
 
   const isDark = flyerStyle === 'midnight';
   const whatsappText = `🎉 You're invited to ${event.name}!\n📅 ${formatDateShort(event.date)}\n📍 ${event.location}\n💸 ${formatKES(event.costPerPerson)} / person\n👤 Hosted by ${event.createdBy}\n\nJoin Room (${event.inviteCode}) on MONTE EVENTS: ${inviteUrl}`;
   const whatsappShareUrl = `https://wa.me/?text=${encodeURIComponent(whatsappText)}`;
+
+  const getSlug = () =>
+    event.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '') || 'monte-event';
+
+  const triggerDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  };
 
   const handleCopyInvite = () => {
     if (navigator.clipboard) {
@@ -478,34 +629,42 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const getFilename = () => {
-    const slug = event.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '');
-    return `${slug || 'monte-event'}-flyer.png`;
-  };
-
-  const handleDownloadFlyer = async () => {
-    if (downloading) return;
-    setDownloading(true);
+  const handleDownload = async (format: 'png' | 'pdf' | 'doc') => {
+    if (downloadingFormat) return;
+    setDownloadingFormat(format);
     try {
-      const blob = await generateFlyerPng(event, flyerStyle, qrDataUrl);
-      if (!blob) {
-        onShowToast('Could not generate flyer image. Try again.', 'info');
+      const canvas = await renderFlyerCanvas(event, flyerStyle, qrDataUrl);
+      if (!canvas) {
+        onShowToast('Could not generate flyer. Try again.', 'info');
         return;
       }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = getFilename();
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 1500);
-      onShowToast('1080×1350 PNG Event Flyer downloaded!');
+
+      if (format === 'png') {
+        const blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob((b) => resolve(b), 'image/png', 0.96)
+        );
+        if (!blob) throw new Error('PNG failed');
+        triggerDownload(blob, `${getSlug()}-flyer.png`);
+        onShowToast('1080×1350 PNG Event Flyer downloaded!');
+      } else if (format === 'pdf') {
+        const jpegBlob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.93)
+        );
+        if (!jpegBlob) throw new Error('PDF image failed');
+        const jpegBytes = new Uint8Array(await jpegBlob.arrayBuffer());
+        const pdfBlob = buildSinglePageJpegPdf(jpegBytes, canvas.width, canvas.height);
+        triggerDownload(pdfBlob, `${getSlug()}-flyer.pdf`);
+        onShowToast('PDF Event Flyer downloaded!');
+      } else {
+        const pngDataUrl = canvas.toDataURL('image/png', 0.92);
+        const docBlob = buildWordDocBlob(event, pngDataUrl, inviteUrl);
+        triggerDownload(docBlob, `${getSlug()}-flyer.doc`);
+        onShowToast('Word (.doc) Event Flyer downloaded!');
+      }
+    } catch {
+      onShowToast('Could not export flyer. Please try again.', 'info');
     } finally {
-      setDownloading(false);
+      setDownloadingFormat(null);
     }
   };
 
@@ -513,11 +672,15 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
     if (sharing) return;
     setSharing(true);
     try {
-      // Try native Web Share API with PNG file on mobile devices first
       if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-        const blob = await generateFlyerPng(event, flyerStyle, qrDataUrl);
+        const canvas = await renderFlyerCanvas(event, flyerStyle, qrDataUrl);
+        const blob = canvas
+          ? await new Promise<Blob | null>((resolve) =>
+              canvas.toBlob((b) => resolve(b), 'image/png', 0.95)
+            )
+          : null;
         if (blob) {
-          const file = new File([blob], getFilename(), { type: 'image/png' });
+          const file = new File([blob], `${getSlug()}-flyer.png`, { type: 'image/png' });
           const canShareFiles =
             typeof navigator.canShare === 'function' &&
             navigator.canShare({ files: [file] });
@@ -531,16 +694,15 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
           }
         }
       }
-      // Desktop / unsupported browser fallback: open WhatsApp with text + join link
       window.open(whatsappShareUrl, '_blank', 'noopener,noreferrer');
     } catch {
-      // User cancelled native share or fallback needed
+      // User dismissed share sheet
     } finally {
       setSharing(false);
     }
   };
 
-  return (
+  return createPortal(
     <AnimatePresence>
       <motion.div
         key="event-flyer-backdrop"
@@ -548,7 +710,7 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
-        className="fixed inset-0 z-[95] flex items-center justify-center bg-[#081128]/85 backdrop-blur-md p-3 sm:p-5 overflow-y-auto"
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-[#081128]/85 backdrop-blur-md p-3 sm:p-5"
         onClick={onClose}
       >
         <motion.div
@@ -556,36 +718,36 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.94, y: 18 }}
           transition={{ duration: 0.28, ease: EASE_SKIPER }}
-          className="relative w-full max-w-4xl rounded-3xl border border-[#D6E6FF] dark:border-[#2563EB]/35 bg-white dark:bg-[#081128] shadow-2xl overflow-hidden my-auto"
+          className="relative w-full max-w-4xl max-h-[92dvh] flex flex-col rounded-3xl border border-[#D6E6FF] dark:border-[#2563EB]/35 bg-white dark:bg-[#081128] shadow-2xl overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Modal Header */}
-          <div className="flex items-center justify-between gap-3 border-b border-[#D6E6FF] dark:border-[#2563EB]/25 px-5 py-3.5 bg-[#F0F6FF]/80 dark:bg-[#0D1C42]">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#2563EB] text-white shadow-sm">
+          <div className="shrink-0 flex items-center justify-between gap-3 border-b border-[#D6E6FF] dark:border-[#2563EB]/25 px-4 sm:px-5 py-3.5 bg-[#F0F6FF]/85 dark:bg-[#0D1C42]">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#2563EB] text-white shadow-sm">
                 <Sparkles className="h-4 w-4" />
               </span>
-              <div>
-                <h2 className="text-sm sm:text-base font-extrabold text-[#081128] dark:text-white">
+              <div className="min-w-0">
+                <h2 className="truncate text-sm sm:text-base font-extrabold text-[#081128] dark:text-white">
                   Your Event Flyer is Ready!
                 </h2>
-                <p className="text-[11px] text-[#081128]/65 dark:text-white/65">
-                  1080×1350 (4:5) PNG Poster with scannable QR invite code
+                <p className="truncate text-[11px] text-[#081128]/65 dark:text-white/65">
+                  Export as PNG Image, PDF, or Word (.doc) with scannable QR code
                 </p>
               </div>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-[#D6E6FF] dark:border-[#2563EB]/35 bg-white dark:bg-[#081128] text-[#081128] dark:text-white hover:border-[#2563EB] transition"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#D6E6FF] dark:border-[#2563EB]/35 bg-white dark:bg-[#081128] text-[#081128] dark:text-white hover:border-[#2563EB] transition"
               aria-label="Close flyer modal"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
 
-          {/* Body: Live 4:5 Flyer Poster Preview + Controls */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 p-5 items-center max-h-[82vh] overflow-y-auto">
+          {/* Scrollable Body: Flyer Preview + Export Controls */}
+          <div className="flex-1 overflow-y-auto grid grid-cols-1 md:grid-cols-12 gap-5 p-4 sm:p-5 items-start md:items-center">
             {/* 4:5 Flyer Poster */}
             <div className="md:col-span-7 flex justify-center">
               <div
@@ -596,7 +758,7 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
                 }`}
               >
                 {/* Top Half Cover Photo */}
-                <div className="relative h-[40%] w-full overflow-hidden bg-gradient-to-br from-[#0B2E8F] to-[#2563EB]">
+                <div className="relative h-[38%] w-full overflow-hidden bg-gradient-to-br from-[#0B2E8F] to-[#2563EB]">
                   {event.coverImage && (
                     <img
                       src={event.coverImage}
@@ -613,8 +775,7 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
                     }`}
                   />
 
-                  {/* Top-left Orbital M Badge + Top-right Category Pill */}
-                  <div className="absolute top-3.5 left-3.5 right-3.5 flex items-center justify-between gap-2">
+                  <div className="absolute top-3 left-3.5 right-3.5 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-[#2563EB] border border-white/80 text-white text-xs font-black shadow-lg">
                         <span className="pointer-events-none absolute -inset-1 rounded-full border border-blue-200/70 -rotate-12 scale-x-125 scale-y-75" />
@@ -634,10 +795,9 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
                 </div>
 
                 {/* Middle & Bottom Content */}
-                <div className="relative z-10 flex-1 flex flex-col justify-between px-4 pb-3.5 -mt-6 space-y-2">
-                  {/* Uppercase Title + Host */}
+                <div className="relative z-10 flex-1 flex flex-col justify-between px-4 pb-3.5 -mt-5 space-y-2">
                   <div>
-                    <h3 className="text-lg sm:text-xl font-black uppercase leading-tight tracking-tight line-clamp-2">
+                    <h3 className="text-base sm:text-xl font-black uppercase leading-tight tracking-tight line-clamp-2">
                       {event.name}
                     </h3>
                     <p
@@ -650,7 +810,7 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
                     </p>
                   </div>
 
-                  {/* 2x2 Glassmorphic Detail Grid */}
+                  {/* 2x2 Glassmorphic Detail Grid — Location wraps neatly to 2 lines */}
                   <div className="grid grid-cols-2 gap-1.5">
                     <div
                       className={`rounded-xl border p-2 ${
@@ -663,7 +823,7 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
                         <Calendar className="h-2.5 w-2.5 text-[#2563EB]" />
                         Date
                       </p>
-                      <p className="text-[11px] font-extrabold truncate mt-0.5">
+                      <p className="text-[11px] font-extrabold leading-tight mt-0.5">
                         {formatDateShort(event.date)}
                       </p>
                     </div>
@@ -678,7 +838,7 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
                         <MapPin className="h-2.5 w-2.5 text-[#2563EB]" />
                         Location
                       </p>
-                      <p className="text-[11px] font-extrabold truncate mt-0.5">
+                      <p className="text-[11px] font-extrabold leading-snug line-clamp-2 mt-0.5">
                         {event.location}
                       </p>
                     </div>
@@ -693,7 +853,7 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
                         <Wallet className="h-2.5 w-2.5 text-[#2563EB]" />
                         KES / Person
                       </p>
-                      <p className="text-[11px] font-extrabold truncate mt-0.5">
+                      <p className="text-[11px] font-extrabold leading-tight mt-0.5">
                         {formatKES(event.costPerPerson)}
                       </p>
                     </div>
@@ -708,14 +868,14 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
                         <Users className="h-2.5 w-2.5 text-[#2563EB]" />
                         Spots &amp; Pay
                       </p>
-                      <p className="text-[11px] font-extrabold truncate mt-0.5">
+                      <p className="text-[11px] font-extrabold leading-snug line-clamp-2 mt-0.5">
                         {event.maxGuests.toLocaleString()} Spots
                         {event.mpesaNumber ? ' • M-PESA Ready' : ''}
                       </p>
                     </div>
                   </div>
 
-                  {/* Main Guests / Headliners (if any) */}
+                  {/* Main Guests */}
                   {event.mainGuests && event.mainGuests.length > 0 && (
                     <div className="space-y-1">
                       <p
@@ -743,7 +903,7 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
                     </div>
                   )}
 
-                  {/* Activities (Glowing Blue-Bordered Glassmorphic Pills — hidden if empty) */}
+                  {/* Activities */}
                   {event.activities && event.activities.length > 0 && (
                     <div className="space-y-1">
                       <p
@@ -770,7 +930,7 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
                     </div>
                   )}
 
-                  {/* Multi-Event Schedule (if added) */}
+                  {/* Multi-Event Schedule */}
                   {event.subEvents && event.subEvents.length > 0 && (
                     <div className="space-y-0.5">
                       <p
@@ -819,10 +979,10 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
               </div>
             </div>
 
-            {/* Right Column: Style Toggles + Download & Share Controls */}
+            {/* Right Column: High-Contrast Style Toggle + PNG / PDF / Word Downloads + Share */}
             <div className="md:col-span-5 space-y-4">
-              {/* 2 Quick Style Toggles */}
-              <div className="rounded-2xl border border-[#D6E6FF] dark:border-[#2563EB]/30 bg-[#F0F6FF]/70 dark:bg-[#0D1C42] p-4 space-y-2.5">
+              {/* 2 High-Contrast Poster Style Toggles */}
+              <div className="rounded-2xl border border-[#D6E6FF] dark:border-[#2563EB]/30 bg-[#F0F6FF]/80 dark:bg-[#0D1C42] p-4 space-y-2.5">
                 <p className="text-[11px] font-extrabold uppercase tracking-wider text-[#2563EB] dark:text-blue-300">
                   Poster Theme
                 </p>
@@ -832,11 +992,11 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
                     onClick={() => setFlyerStyle('midnight')}
                     className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-extrabold border transition ${
                       flyerStyle === 'midnight'
-                        ? 'border-[#2563EB] bg-[#081128] text-white shadow-sm'
-                        : 'border-[#D6E6FF] dark:border-[#2563EB]/30 bg-white dark:bg-[#081128]/50 text-[#081128] dark:text-white'
+                        ? 'border-[#2563EB] bg-[#081128] text-white ring-2 ring-[#2563EB]/40 shadow-sm'
+                        : 'border-[#D6E6FF] dark:border-[#2563EB]/30 bg-white dark:bg-[#081128]/60 text-[#081128] dark:text-white hover:border-[#2563EB]'
                     }`}
                   >
-                    <Moon className="h-3.5 w-3.5 text-[#2563EB]" />
+                    <Moon className="h-3.5 w-3.5 text-[#3B82F6]" />
                     Midnight Blue
                   </button>
                   <button
@@ -844,35 +1004,66 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
                     onClick={() => setFlyerStyle('light')}
                     className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-extrabold border transition ${
                       flyerStyle === 'light'
-                        ? 'border-[#2563EB] bg-[#2563EB] text-white shadow-sm'
-                        : 'border-[#D6E6FF] dark:border-[#2563EB]/30 bg-white dark:bg-[#081128]/50 text-[#081128] dark:text-white'
+                        ? 'border-[#2563EB] bg-white text-[#081128] ring-2 ring-[#2563EB]/40 shadow-sm'
+                        : 'border-[#D6E6FF] dark:border-[#2563EB]/30 bg-white/70 dark:bg-[#081128]/60 text-[#081128] dark:text-white hover:border-[#2563EB]'
                     }`}
                   >
-                    <Sun className="h-3.5 w-3.5" />
+                    <Sun className="h-3.5 w-3.5 text-amber-500" />
                     Clean Light
                   </button>
                 </div>
               </div>
 
-              <div className="space-y-2.5">
+              {/* Download Formats: PNG Image, PDF, Word (.doc) */}
+              <div className="space-y-2">
                 <button
                   type="button"
-                  onClick={handleDownloadFlyer}
-                  disabled={downloading}
+                  onClick={() => handleDownload('png')}
+                  disabled={downloadingFormat !== null}
                   className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 px-5 py-3.5 text-sm font-extrabold text-white shadow-monte transition active:scale-95"
                 >
-                  {downloading ? (
+                  {downloadingFormat === 'png' ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Generating 1080×1350 PNG…
+                      Exporting PNG Image…
                     </>
                   ) : (
                     <>
-                      <Download className="h-4 w-4" />
-                      Download Flyer (PNG)
+                      <FileImage className="h-4 w-4" />
+                      Download Image (PNG)
                     </>
                   )}
                 </button>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDownload('pdf')}
+                    disabled={downloadingFormat !== null}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-2xl border border-[#2563EB]/40 bg-[#F0F6FF] dark:bg-[#0D1C42] hover:border-[#2563EB] disabled:opacity-60 px-3.5 py-2.5 text-xs font-extrabold text-[#081128] dark:text-white transition active:scale-95"
+                  >
+                    {downloadingFormat === 'pdf' ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[#2563EB]" />
+                    ) : (
+                      <FileText className="h-3.5 w-3.5 text-red-500" />
+                    )}
+                    Download PDF
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDownload('doc')}
+                    disabled={downloadingFormat !== null}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-2xl border border-[#2563EB]/40 bg-[#F0F6FF] dark:bg-[#0D1C42] hover:border-[#2563EB] disabled:opacity-60 px-3.5 py-2.5 text-xs font-extrabold text-[#081128] dark:text-white transition active:scale-95"
+                  >
+                    {downloadingFormat === 'doc' ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[#2563EB]" />
+                    ) : (
+                      <FileType className="h-3.5 w-3.5 text-[#2563EB]" />
+                    )}
+                    Download Word
+                  </button>
+                </div>
 
                 <button
                   type="button"
@@ -887,7 +1078,7 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
                 <button
                   type="button"
                   onClick={handleCopyInvite}
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2563EB]/35 bg-white dark:bg-[#0D1C42] hover:border-[#2563EB] px-5 py-3 text-sm font-extrabold text-[#081128] dark:text-white transition"
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2563EB]/35 bg-white dark:bg-[#0D1C42] hover:border-[#2563EB] px-5 py-2.5 text-xs sm:text-sm font-extrabold text-[#081128] dark:text-white transition"
                 >
                   {copiedLink ? (
                     <>
@@ -906,14 +1097,16 @@ export const EventFlyerModal: React.FC<EventFlyerModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="w-full rounded-2xl bg-[#F0F6FF] dark:bg-[#13224A] hover:bg-[#D6E6FF]/70 dark:hover:bg-[#1A2D5E] px-5 py-2.5 text-xs font-extrabold text-[#081128] dark:text-white transition"
+                className="w-full inline-flex items-center justify-center gap-1.5 rounded-2xl bg-[#F0F6FF] dark:bg-[#13224A] hover:bg-[#D6E6FF]/70 dark:hover:bg-[#1A2D5E] px-5 py-2.5 text-xs font-extrabold text-[#081128] dark:text-white transition"
               >
+                <Download className="h-3.5 w-3.5 opacity-0 hidden" />
                 Continue to Event Room
               </button>
             </div>
           </div>
         </motion.div>
       </motion.div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };

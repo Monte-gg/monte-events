@@ -189,19 +189,16 @@ export const ScrollProgressBar: React.FC<ScrollProgressBarProps> = ({
   percent,
   heightClass = 'h-2.5',
 }) => {
-  const clamped = Math.max(0, Math.min(100, percent));
+  const clamped = Math.max(0, Math.min(100, Math.round(percent)));
   return (
     <div
       className={`${heightClass} w-full rounded-full bg-[#D6E6FF] dark:bg-[#0A1430] overflow-hidden`}
     >
       <motion.div
-        initial={{ scaleX: 0 }}
-        whileInView={{ scaleX: clamped / 100 }}
-        viewport={{ once: true, amount: 0.3 }}
-        animate={{ scaleX: clamped / 100 }}
-        transition={{ duration: 0.55, ease: EASE_SKIPER }}
-        style={{ transformOrigin: 'left center' }}
-        className="h-full w-full rounded-full bg-gradient-to-r from-[#1A6BFF] to-[#2B7FFF]"
+        initial={{ width: 0 }}
+        animate={{ width: `${clamped}%` }}
+        transition={{ duration: 0.45, ease: EASE_SKIPER }}
+        className="h-full rounded-full bg-gradient-to-r from-[#1A6BFF] to-[#2B7FFF]"
       />
     </div>
   );

@@ -6,14 +6,25 @@
   html {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     scroll-behavior: smooth;
+    overflow-x: clip;
   }
 
   body {
     @apply bg-monte-ice text-monte-navy transition-colors duration-200;
+    overflow-x: clip;
+    min-height: 100dvh;
   }
 
   .dark body {
     @apply bg-monte-darkBg text-white;
+  }
+
+  @media (max-width: 767px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
   }
 }
 

@@ -243,8 +243,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
       </div>
 
-      {/* Stats Row with Count-Up + Cursor Spotlight */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+      {/* Stats Row with Exact Math + Cursor Spotlight */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <SpotlightCard>
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-[#0A1E5C]/65 dark:text-white/65">
@@ -255,7 +255,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </span>
           </div>
           <p className="mt-2.5 text-xl sm:text-2xl font-extrabold text-[#0A1E5C] dark:text-white tracking-tight">
-            <CountUpNumber value={stats.upcomingEvents} durationMs={550} />
+            {stats.upcomingEvents}
           </p>
           <p className="mt-1 text-xs font-medium text-[#1A6BFF] dark:text-[#2B7FFF]">
             Active event rooms
@@ -272,7 +272,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </span>
           </div>
           <p className="mt-2.5 text-xl sm:text-2xl font-extrabold text-[#0A1E5C] dark:text-white tracking-tight">
-            <CountUpNumber value={stats.totalGuests} durationMs={560} />
+            {stats.totalGuests}
           </p>
           <p className="mt-1 text-xs font-medium text-[#1A6BFF] dark:text-[#2B7FFF]">
             Invited across rooms
@@ -291,7 +291,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <p className="mt-2.5 text-xl sm:text-2xl font-extrabold text-[#0A1E5C] dark:text-white tracking-tight">
             <CountUpNumber
               value={stats.totalBudgetCollected}
-              durationMs={600}
+              durationMs={400}
               formatter={(v) => formatKES(v)}
             />
           </p>
@@ -310,11 +310,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </span>
           </div>
           <p className="mt-2.5 text-xl sm:text-2xl font-extrabold text-[#0A1E5C] dark:text-white tracking-tight">
-            <CountUpNumber value={stats.paidGuests} durationMs={560} /> /{' '}
-            <CountUpNumber value={stats.totalGuests} durationMs={560} />
+            {stats.paidGuests} / {stats.totalGuests}
           </p>
           <p className="mt-1 text-xs font-medium text-[#1A6BFF] dark:text-[#2B7FFF]">
-            {stats.totalGuests
+            {stats.totalGuests > 0
               ? Math.round((stats.paidGuests / stats.totalGuests) * 100)
               : 0}
             % confirmed
@@ -401,7 +400,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {filteredEvents.map((event) => {
               const paidCount = event.guests.filter((g) => g.paid).length;
               const totalCount = event.guests.length;
@@ -459,11 +458,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     <div className="grid grid-cols-2 gap-3 text-xs">
                       <div className="rounded-xl bg-[#F0F6FF] dark:bg-[#0B1A3A] p-2.5">
                         <span className="text-[#0A1E5C]/60 dark:text-white/60 font-semibold block">
-                          Guests
+                          Spots Confirmed
                         </span>
                         <span className="mt-0.5 font-extrabold text-sm text-[#0A1E5C] dark:text-white inline-flex items-center gap-1">
                           <Users className="h-3.5 w-3.5 text-[#1A6BFF] dark:text-[#2B7FFF]" />
-                          {totalCount} / {event.maxGuests}
+                          {paidCount} / {event.maxGuests.toLocaleString()}
                         </span>
                       </div>
                       <div className="rounded-xl bg-[#F0F6FF] dark:bg-[#0B1A3A] p-2.5">
@@ -552,7 +551,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </p>
           </div>
         ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+        <div className="flex overflow-x-auto snap-x snap-mandatory gap-3 pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:pb-0 sm:grid sm:grid-cols-3 lg:grid-cols-6 sm:overflow-visible">
           {media.slice(0, 6).map((item) => (
             <motion.button
               key={item.id}
@@ -561,7 +560,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               whileTap={{ scale: 0.97 }}
               transition={SPRING_SNAPPY}
               onClick={() => onSelectMedia(item)}
-              className="group relative aspect-[4/5] overflow-hidden rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-gradient-to-br from-[#0B2E8F] to-[#1A6BFF] text-left shadow-sm"
+              className="group relative shrink-0 w-36 sm:w-auto snap-start aspect-[4/5] overflow-hidden rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-gradient-to-br from-[#0B2E8F] to-[#1A6BFF] text-left shadow-sm"
             >
               <img
                 src={item.thumbnail}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { CheckCircle2, Info, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { SPRING_SNAPPY } from './MotionPrimitives';
@@ -18,8 +19,10 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({
   toasts,
   onDismiss,
 }) => {
-  return (
-    <div className="fixed top-20 right-4 z-[100] flex flex-col gap-2 max-w-sm w-[calc(100%-2rem)] pointer-events-none">
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[120] flex flex-col items-center gap-2 max-w-sm w-[calc(100%-2rem)] pointer-events-none pt-[env(safe-area-inset-top)]">
       <AnimatePresence initial={false}>
         {toasts.map((t) => (
           <motion.div
@@ -29,7 +32,7 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -12, scale: 0.95 }}
             transition={SPRING_SNAPPY}
-            className="pointer-events-auto relative overflow-hidden rounded-2xl border border-[#2B7FFF]/35 bg-[#0A1E5C] dark:bg-[#13224A] px-4 py-3 text-white shadow-xl"
+            className="pointer-events-auto w-full relative overflow-hidden rounded-2xl border border-[#2B7FFF]/35 bg-[#0A1E5C] dark:bg-[#13224A] px-4 py-3 text-white shadow-xl"
           >
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 text-sm font-medium">
@@ -63,6 +66,7 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({
           </motion.div>
         ))}
       </AnimatePresence>
-    </div>
+    </div>,
+    document.body
   );
 };

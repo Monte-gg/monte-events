@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowLeft,
   Calendar,
@@ -213,7 +214,7 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
   const remainingBalance = collectedAmount - totalSpent;
   const spentPct =
     collectedAmount > 0
-      ? Math.min(100, Math.round((totalSpent / collectedAmount) * 100))
+      ? Math.min(100, Math.round((totalSpent / Math.max(1, collectedAmount)) * 100))
       : totalSpent > 0
       ? 100
       : 0;
@@ -447,31 +448,31 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
             <p className="text-xs sm:text-sm text-white/85 leading-relaxed">
               {event.description}
             </p>
-            <div className="flex flex-wrap items-center gap-4 pt-1 text-xs sm:text-sm font-semibold text-white/95">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5 sm:gap-4 pt-1 text-xs sm:text-sm font-semibold text-white/95">
               <span className="inline-flex items-center gap-1.5">
-                <Calendar className="h-4 w-4 text-[#D6E6FF]" />
+                <Calendar className="h-4 w-4 text-[#D6E6FF] shrink-0" />
                 {formatDateShort(event.date)}
               </span>
               <button
                 type="button"
                 onClick={() => setShowDirectionsModal(true)}
-                className="inline-flex items-center gap-1.5 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm px-3 py-1 transition text-left"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur-sm px-3 py-1.5 transition text-left w-fit max-w-full"
                 title="Click for map pin & turn-by-turn directions"
               >
                 <MapPin className="h-4 w-4 text-[#D6E6FF] shrink-0" />
-                <span className="underline decoration-white/60 underline-offset-2">
+                <span className="underline decoration-white/60 underline-offset-2 truncate">
                   {event.location}
                 </span>
                 <Navigation className="h-3.5 w-3.5 text-[#D6E6FF] shrink-0" />
               </button>
               <span className="inline-flex items-center gap-1.5">
-                <Users className="h-4 w-4 text-[#D6E6FF]" />
-                {paidGuests.length}/{event.maxGuests.toLocaleString()} Spots
+                <Users className="h-4 w-4 text-[#D6E6FF] shrink-0" />
+                {paidGuests.length} / {event.maxGuests.toLocaleString()} Spots
               </span>
             </div>
           </div>
 
-          <div className="shrink-0 flex flex-wrap items-center gap-2">
+          <div className="shrink-0 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 w-full md:w-auto">
             {onJoinRoom &&
               !event.guests.some(
                 (g) =>
@@ -481,7 +482,7 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
                 <button
                   type="button"
                   onClick={() => onJoinRoom(event.id)}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] border border-white/25 px-5 py-3 text-xs sm:text-sm font-extrabold text-white shadow-lg transition active:scale-95"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] border border-white/25 px-5 py-3 text-xs sm:text-sm font-extrabold text-white shadow-lg transition active:scale-95"
                 >
                   <Plus className="h-4 w-4" />
                   Join Room
@@ -491,7 +492,7 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
               <button
                 type="button"
                 onClick={() => onOpenFlyer(event)}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] border border-white/25 px-4 py-2.5 text-xs sm:text-sm font-extrabold text-white shadow-lg transition active:scale-95"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] border border-white/25 px-4 py-2.5 text-xs sm:text-sm font-extrabold text-white shadow-lg transition active:scale-95"
               >
                 <Sparkles className="h-4 w-4" />
                 View / Download Flyer
@@ -500,7 +501,7 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
             <button
               type="button"
               onClick={handleCopyLink}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white text-[#0B2E8F] hover:bg-[#F0F6FF] px-4 py-2.5 text-xs sm:text-sm font-extrabold shadow-lg transition active:scale-95"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-white text-[#0B2E8F] hover:bg-[#F0F6FF] px-4 py-2.5 text-xs sm:text-sm font-extrabold shadow-lg transition active:scale-95"
             >
               {copiedInvite ? (
                 <>
@@ -518,7 +519,7 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
               href={whatsappShareUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-600 px-4 py-2.5 text-xs sm:text-sm font-extrabold text-white shadow-lg transition active:scale-95"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-600 px-4 py-2.5 text-xs sm:text-sm font-extrabold text-white shadow-lg transition active:scale-95"
             >
               <Share2 className="h-4 w-4" />
               Share on WhatsApp
@@ -527,75 +528,78 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
         </div>
       </div>
 
-      {/* Location & Directions Modal */}
-      {showDirectionsModal && (
-        <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-[#0A1430]/75 backdrop-blur-sm p-4"
-          onClick={() => setShowDirectionsModal(false)}
-        >
+      {/* Location & Directions Modal (Portal to document.body) */}
+      {showDirectionsModal &&
+        typeof document !== 'undefined' &&
+        createPortal(
           <div
-            className="animate-slide-up w-full max-w-md rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-white dark:bg-[#13224A] p-6 shadow-2xl space-y-4"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0A1430]/75 backdrop-blur-sm p-4"
+            onClick={() => setShowDirectionsModal(false)}
           >
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#1A6BFF]/15 text-[#1A6BFF] dark:text-[#2B7FFF]">
-                  <MapPin className="h-5 w-5" />
-                </span>
-                <div>
-                  <h2 className="text-base font-extrabold text-[#0A1E5C] dark:text-white">
-                    Event Location &amp; Directions
-                  </h2>
-                  <p className="text-xs text-[#0A1E5C]/65 dark:text-white/65">
-                    {event.location}
-                  </p>
+            <div
+              className="animate-slide-up w-full max-w-md max-h-[92dvh] overflow-y-auto rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-white dark:bg-[#13224A] p-6 shadow-2xl space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#1A6BFF]/15 text-[#1A6BFF] dark:text-[#2B7FFF]">
+                    <MapPin className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <h2 className="text-base font-extrabold text-[#0A1E5C] dark:text-white">
+                      Event Location &amp; Directions
+                    </h2>
+                    <p className="text-xs text-[#0A1E5C]/65 dark:text-white/65">
+                      {event.location}
+                    </p>
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDirectionsModal(false)}
+                  className="rounded-full p-1.5 text-[#0A1E5C]/60 dark:text-white/60 hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowDirectionsModal(false)}
-                className="rounded-full p-1.5 text-[#0A1E5C]/60 dark:text-white/60 hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
 
-            <div className="space-y-2.5">
-              <a
-                href={mapDirectionsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-4 py-3 text-sm font-extrabold text-white shadow-monte transition"
-              >
-                <Navigation className="h-4 w-4" />
-                Get Turn-by-Turn Directions
-              </a>
-              <a
-                href={mapViewUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-[#F0F6FF] dark:bg-[#0B1A3A] px-4 py-3 text-sm font-extrabold text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF] transition"
-              >
-                <ExternalLink className="h-4 w-4 text-[#1A6BFF]" />
-                View Pinned Location on Maps
-              </a>
-              <button
-                type="button"
-                onClick={() => {
-                  if (navigator.clipboard) {
-                    navigator.clipboard.writeText(event.location).catch(() => {});
-                  }
-                  onShowToast('Location copied!');
-                }}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 px-4 py-2.5 text-xs font-bold text-[#0A1E5C]/80 dark:text-white/80 hover:bg-[#F0F6FF] dark:hover:bg-[#0B1A3A] transition"
-              >
-                <Copy className="h-3.5 w-3.5" />
-                Copy Location Address
-              </button>
+              <div className="space-y-2.5">
+                <a
+                  href={mapDirectionsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-4 py-3 text-sm font-extrabold text-white shadow-monte transition"
+                >
+                  <Navigation className="h-4 w-4" />
+                  Get Turn-by-Turn Directions
+                </a>
+                <a
+                  href={mapViewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-[#F0F6FF] dark:bg-[#0B1A3A] px-4 py-3 text-sm font-extrabold text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF] transition"
+                >
+                  <ExternalLink className="h-4 w-4 text-[#1A6BFF]" />
+                  View Pinned Location on Maps
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (navigator.clipboard) {
+                      navigator.clipboard.writeText(event.location).catch(() => {});
+                    }
+                    onShowToast('Location copied!');
+                  }}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 px-4 py-2.5 text-xs font-bold text-[#0A1E5C]/80 dark:text-white/80 hover:bg-[#F0F6FF] dark:hover:bg-[#0B1A3A] transition"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  Copy Location Address
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {/* Highlights Strip: Main Guests, Activities & Multi-Event Lineup */}
       {((event.mainGuests && event.mainGuests.length > 0) ||
@@ -671,8 +675,8 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
         </div>
       )}
 
-      {/* Room Tabs: Guests | Budget | Media | Chat with gliding active pill */}
-      <div className="grid grid-cols-4 gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-1.5">
+      {/* Room Tabs: Guests | Budget | Media | Chat — horizontally scrollable on narrow phones */}
+      <div className="flex overflow-x-auto sm:grid sm:grid-cols-4 gap-1.5 sm:gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-1.5">
         {(
           [
             { id: 'guests', label: 'Guests', icon: Users, count: event.guests.length },
@@ -693,7 +697,7 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
               key={t.id}
               type="button"
               onClick={() => onTabChange(t.id)}
-              className={`relative flex items-center justify-center gap-1.5 sm:gap-2 rounded-xl py-2.5 px-2 text-xs sm:text-sm font-extrabold transition-colors ${
+              className={`relative shrink-0 min-w-[92px] sm:min-w-0 flex-1 flex items-center justify-center gap-1.5 sm:gap-2 rounded-xl py-2.5 px-3 sm:px-2 text-xs sm:text-sm font-extrabold whitespace-nowrap transition-colors ${
                 active
                   ? 'text-white'
                   : 'text-[#0A1E5C]/70 dark:text-white/70 hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]'
@@ -1409,80 +1413,83 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
         />
       )}
 
-      {/* Guest "I've Paid" M-PESA Code Modal */}
-      {mpesaModalGuest && (
-        <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-[#0A1430]/75 backdrop-blur-sm p-4"
-          onClick={() => setMpesaModalGuest(null)}
-        >
+      {/* Guest "I've Paid" M-PESA Code Modal (Portal to document.body) */}
+      {mpesaModalGuest &&
+        typeof document !== 'undefined' &&
+        createPortal(
           <div
-            className="animate-slide-up w-full max-w-md rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] p-6 shadow-2xl space-y-4"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0A1430]/75 backdrop-blur-sm p-4"
+            onClick={() => setMpesaModalGuest(null)}
           >
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-                  <Smartphone className="h-5 w-5" />
-                </span>
-                <div>
-                  <h3 className="text-base font-extrabold text-[#0A1E5C] dark:text-white">
-                    Submit M-PESA Code
-                  </h3>
-                  <p className="text-xs text-[#0A1E5C]/60 dark:text-white/60">
-                    For {mpesaModalGuest.name} · {formatKES(mpesaModalGuest.amount)}
-                  </p>
+            <div
+              className="animate-slide-up w-full max-w-md max-h-[92dvh] overflow-y-auto rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] p-6 shadow-2xl space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                    <Smartphone className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <h3 className="text-base font-extrabold text-[#0A1E5C] dark:text-white">
+                      Submit M-PESA Code
+                    </h3>
+                    <p className="text-xs text-[#0A1E5C]/60 dark:text-white/60">
+                      For {mpesaModalGuest.name} · {formatKES(mpesaModalGuest.amount)}
+                    </p>
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setMpesaModalGuest(null)}
+                  className="rounded-full p-1.5 text-[#0A1E5C]/60 dark:text-white/60 hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setMpesaModalGuest(null)}
-                className="rounded-full p-1.5 text-[#0A1E5C]/60 dark:text-white/60 hover:bg-[#F0F6FF] dark:hover:bg-[#1A2D5E]"
-              >
-                <X className="h-4 w-4" />
-              </button>
+
+              <p className="text-xs text-[#0A1E5C]/75 dark:text-white/75 leading-relaxed">
+                Paste the M-PESA confirmation code from your SMS (e.g.{' '}
+                <span className="font-mono font-bold">SLK84X92M1</span>). The room host will be notified to approve your payment.
+              </p>
+
+              <input
+                type="text"
+                value={mpesaCodeInput}
+                onChange={(e) => setMpesaCodeInput(e.target.value.toUpperCase())}
+                placeholder="e.g. SLK84X92M1"
+                className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-4 py-3 text-sm font-mono font-extrabold tracking-wider text-[#0A1E5C] dark:text-white uppercase focus:border-[#1A6BFF] focus:outline-none"
+              />
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setMpesaModalGuest(null)}
+                  className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-4 py-2 text-xs font-bold text-[#0A1E5C] dark:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={mpesaCodeInput.trim().length < 4}
+                  onClick={() => {
+                    onSubmitGuestMpesaCode(
+                      event.id,
+                      mpesaModalGuest.id,
+                      mpesaCodeInput.trim().toUpperCase()
+                    );
+                    setMpesaModalGuest(null);
+                    setMpesaCodeInput('');
+                  }}
+                  className="rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] disabled:opacity-45 px-5 py-2 text-xs font-extrabold text-white shadow-sm transition"
+                >
+                  Submit for Verification
+                </button>
+              </div>
             </div>
-
-            <p className="text-xs text-[#0A1E5C]/75 dark:text-white/75 leading-relaxed">
-              Paste the M-PESA confirmation code from your SMS (e.g.{' '}
-              <span className="font-mono font-bold">SLK84X92M1</span>). The room host will be notified to approve your payment.
-            </p>
-
-            <input
-              type="text"
-              value={mpesaCodeInput}
-              onChange={(e) => setMpesaCodeInput(e.target.value.toUpperCase())}
-              placeholder="e.g. SLK84X92M1"
-              className="w-full rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] px-4 py-3 text-sm font-mono font-extrabold tracking-wider text-[#0A1E5C] dark:text-white uppercase focus:border-[#1A6BFF] focus:outline-none"
-            />
-
-            <div className="flex items-center justify-end gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setMpesaModalGuest(null)}
-                className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 px-4 py-2 text-xs font-bold text-[#0A1E5C] dark:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={mpesaCodeInput.trim().length < 4}
-                onClick={() => {
-                  onSubmitGuestMpesaCode(
-                    event.id,
-                    mpesaModalGuest.id,
-                    mpesaCodeInput.trim().toUpperCase()
-                  );
-                  setMpesaModalGuest(null);
-                  setMpesaCodeInput('');
-                }}
-                className="rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] disabled:opacity-45 px-5 py-2 text-xs font-extrabold text-white shadow-sm transition"
-              >
-                Submit for Verification
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 };
