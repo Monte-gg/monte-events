@@ -23,6 +23,13 @@ export interface Friend {
 
 export type MpesaType = 'phone' | 'till' | 'paybill' | 'pochi';
 
+export type PayoutType = 'bank' | 'till' | 'paybill' | 'personal_mpesa';
+
+export interface BankPaybillOption {
+  name: string;
+  paybill: string;
+}
+
 export type PaymentStatus = 'pending' | 'submitted' | 'confirmed';
 
 export type ExpenseCategory =
@@ -164,6 +171,10 @@ export interface MonteEvent {
   mpesaNumber?: string;
   mpesaAccount?: string;
   mpesaName?: string;
+  payoutType?: PayoutType;
+  payheroChannelId?: number | null;
+  payoutShortCode?: string;
+  payoutAccountNumber?: string;
   expenses?: ExpenseItem[];
   activities?: string[];
   mainGuests?: MainGuest[];

@@ -18,6 +18,7 @@ import {
   fetchRoomMessagesFromApi,
   fetchRoomsFromApi,
   joinRoomOnApi,
+  registerHostPayheroChannelOnApi,
   removeGuestOnApi,
   sendRoomMessageOnApi,
   sendWelcomeEmailOnApi,
@@ -68,7 +69,9 @@ import {
   Guest,
   MediaItem,
   MonteEvent,
+  MpesaType,
   NotificationItem,
+  PayoutType,
   PlatformMember,
   PublicInvitePreview,
   UserProfile,
@@ -1327,6 +1330,36 @@ function MonteAppContent() {
         ...welcomeMsg,
         eventId: mergedRoom.id,
       });
+
+      // Dynamically register the host's Bank / Till / Paybill channel on PayHero if not assigned yet
+      if (
+        !mergedRoom.payheroChannelId &&
+        mergedRoom.payoutType &&
+        ['bank', 'till', 'paybill'].includes(mergedRoom.payoutType) &&
+        mergedRoom.payoutShortCode
+      ) {
+        const reg = await registerHostPayheroChannelOnApi({
+          eventId: mergedRoom.id,
+          payoutType: mergedRoom.payoutType as 'bank' | 'till' | 'paybill',
+          shortCode: mergedRoom.payoutShortCode,
+          accountNumber: mergedRoom.payoutAccountNumber || '',
+          eventTitle: mergedRoom.name,
+          hostName: mergedRoom.createdBy,
+        });
+        if (reg.success && reg.channelId) {
+          setEvents((prev) =>
+            prev.map((ev) =>
+              ev.id === mergedRoom.id
+                ? { ...ev, payheroChannelId: reg.channelId }
+                : ev
+            )
+          );
+          showToast(
+            'Direct M-PESA STK Push channel activated for your payout account!',
+            'success'
+          );
+        }
+      }
     });
     setActiveEventId(newEvent.id);
     setActiveEventTab('guests');
@@ -1368,12 +1401,21 @@ function MonteAppContent() {
       totalBudget?: number;
       maxGuests?: number;
       costPerPerson?: number;
+      mpesaType?: MpesaType;
+      mpesaNumber?: string;
+      mpesaAccount?: string;
+      mpesaName?: string;
+      payoutType?: PayoutType;
+      payheroChannelId?: number | null;
+      payoutShortCode?: string;
+      payoutAccountNumber?: string;
     }
   ) => {
     if (isGuestMode) {
-      promptGuestToSignUp('Sign in to edit room budget and guest capacity.');
+      promptGuestToSignUp('Sign in to edit room settings.');
       return;
     }
+    const targetRoom = events.find((e) => e.id === eventId);
     setEvents((prev) =>
       prev.map((ev) =>
         ev.id === eventId
@@ -1386,12 +1428,65 @@ function MonteAppContent() {
               ...(updates.costPerPerson !== undefined
                 ? { costPerPerson: updates.costPerPerson }
                 : {}),
+              ...(updates.mpesaType !== undefined ? { mpesaType: updates.mpesaType } : {}),
+              ...(updates.mpesaNumber !== undefined
+                ? { mpesaNumber: updates.mpesaNumber }
+                : {}),
+              ...(updates.mpesaAccount !== undefined
+                ? { mpesaAccount: updates.mpesaAccount }
+                : {}),
+              ...(updates.mpesaName !== undefined ? { mpesaName: updates.mpesaName } : {}),
+              ...(updates.payoutType !== undefined ? { payoutType: updates.payoutType } : {}),
+              ...(updates.payheroChannelId !== undefined
+                ? { payheroChannelId: updates.payheroChannelId }
+                : {}),
+              ...(updates.payoutShortCode !== undefined
+                ? { payoutShortCode: updates.payoutShortCode }
+                : {}),
+              ...(updates.payoutAccountNumber !== undefined
+                ? { payoutAccountNumber: updates.payoutAccountNumber }
+                : {}),
             }
           : ev
       )
     );
     void updateRoomOnApi(eventId, updates);
-    showToast('Room budget & capacity updated!');
+
+    if (
+      updates.payoutType &&
+      ['bank', 'till', 'paybill'].includes(updates.payoutType) &&
+      updates.payoutShortCode
+    ) {
+      void registerHostPayheroChannelOnApi({
+        eventId,
+        payoutType: updates.payoutType as 'bank' | 'till' | 'paybill',
+        shortCode: updates.payoutShortCode,
+        accountNumber: updates.payoutAccountNumber || '',
+        eventTitle: targetRoom?.name || 'Monte Event',
+        hostName: targetRoom?.createdBy || user.name,
+      }).then((reg) => {
+        if (reg.success && reg.channelId) {
+          setEvents((prev) =>
+            prev.map((ev) =>
+              ev.id === eventId ? { ...ev, payheroChannelId: reg.channelId } : ev
+            )
+          );
+          showToast('Host payout channel linked! Instant STK Push is now live.', 'success');
+        } else {
+          showToast(
+            reg.error || 'Payout details saved. Configure PAYHERO_ACCOUNT_ID on Render to enable STK Push.',
+            'info'
+          );
+        }
+      });
+      return;
+    }
+
+    showToast(
+      updates.payoutType === 'personal_mpesa'
+        ? 'Updated to direct personal M-PESA Send Money!'
+        : 'Room settings updated!'
+    );
   };
 
   const handleDeleteEvent = (eventId: string) => {

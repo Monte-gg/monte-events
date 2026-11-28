@@ -1,4 +1,5 @@
 import {
+  BankPaybillOption,
   BudgetBreakdown,
   ChatMessage,
   ChatReaction,
@@ -11,10 +12,24 @@ import {
   MonteEvent,
   MpesaType,
   PaymentStatus,
+  PayoutType,
   PlatformMember,
   PublicInvitePreview,
   SubEvent,
 } from '../types';
+
+export const FALLBACK_KENYAN_BANKS: BankPaybillOption[] = [
+  { name: 'KCB Bank', paybill: '522522' },
+  { name: 'Equity Bank', paybill: '247247' },
+  { name: 'Co-operative Bank', paybill: '400200' },
+  { name: 'NCBA Bank', paybill: '880100' },
+  { name: 'ABSA Bank Kenya', paybill: '303030' },
+  { name: 'I&M Bank', paybill: '542542' },
+  { name: 'Standard Chartered', paybill: '329329' },
+  { name: 'Stanbic Bank', paybill: '600100' },
+  { name: 'Family Bank', paybill: '222111' },
+  { name: 'Diamond Trust Bank (DTB)', paybill: '516600' },
+];
 
 export const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || 'https://monte-events.onrender.com'
@@ -94,6 +109,10 @@ interface RawRoom {
   mpesa_number?: string | null;
   mpesa_account?: string | null;
   mpesa_name?: string | null;
+  payout_type?: PayoutType | null;
+  payhero_channel_id?: number | null;
+  payout_short_code?: string | null;
+  payout_account_number?: string | null;
   activities?: string[];
   main_guests?: MainGuest[];
   sub_events?: SubEvent[];
@@ -197,6 +216,13 @@ function mapRoom(r: RawRoom): MonteEvent {
     mpesaNumber: r.mpesa_number || undefined,
     mpesaAccount: r.mpesa_account || undefined,
     mpesaName: r.mpesa_name || undefined,
+    payoutType: r.payout_type || undefined,
+    payheroChannelId:
+      r.payhero_channel_id !== null && r.payhero_channel_id !== undefined
+        ? Number(r.payhero_channel_id)
+        : null,
+    payoutShortCode: r.payout_short_code || undefined,
+    payoutAccountNumber: r.payout_account_number || undefined,
     activities: Array.isArray(r.activities) ? r.activities : [],
     mainGuests: Array.isArray(r.main_guests) ? r.main_guests : [],
     subEvents: Array.isArray(r.sub_events) ? r.sub_events : [],
@@ -291,6 +317,10 @@ export async function createRoomOnApi(
         mpesa_number: event.mpesaNumber || null,
         mpesa_account: event.mpesaAccount || null,
         mpesa_name: event.mpesaName || null,
+        payout_type: event.payoutType || null,
+        payhero_channel_id: event.payheroChannelId ?? null,
+        payout_short_code: event.payoutShortCode || null,
+        payout_account_number: event.payoutAccountNumber || null,
         activities: event.activities || [],
         main_guests: event.mainGuests || [],
         sub_events: event.subEvents || [],
@@ -350,6 +380,14 @@ export async function updateRoomOnApi(
     activities?: string[];
     mainGuests?: MainGuest[];
     subEvents?: SubEvent[];
+    mpesaType?: MpesaType;
+    mpesaNumber?: string;
+    mpesaAccount?: string;
+    mpesaName?: string;
+    payoutType?: PayoutType;
+    payheroChannelId?: number | null;
+    payoutShortCode?: string;
+    payoutAccountNumber?: string;
   }
 ): Promise<boolean> {
   try {
@@ -368,11 +406,77 @@ export async function updateRoomOnApi(
         ...(updates.activities !== undefined ? { activities: updates.activities } : {}),
         ...(updates.mainGuests !== undefined ? { main_guests: updates.mainGuests } : {}),
         ...(updates.subEvents !== undefined ? { sub_events: updates.subEvents } : {}),
+        ...(updates.mpesaType !== undefined ? { mpesa_type: updates.mpesaType } : {}),
+        ...(updates.mpesaNumber !== undefined ? { mpesa_number: updates.mpesaNumber } : {}),
+        ...(updates.mpesaAccount !== undefined
+          ? { mpesa_account: updates.mpesaAccount }
+          : {}),
+        ...(updates.mpesaName !== undefined ? { mpesa_name: updates.mpesaName } : {}),
+        ...(updates.payoutType !== undefined ? { payout_type: updates.payoutType } : {}),
+        ...(updates.payheroChannelId !== undefined
+          ? { payhero_channel_id: updates.payheroChannelId }
+          : {}),
+        ...(updates.payoutShortCode !== undefined
+          ? { payout_short_code: updates.payoutShortCode }
+          : {}),
+        ...(updates.payoutAccountNumber !== undefined
+          ? { payout_account_number: updates.payoutAccountNumber }
+          : {}),
       }),
     });
     return true;
   } catch {
     return false;
+  }
+}
+
+export async function fetchKenyanBanksFromApi(): Promise<BankPaybillOption[]> {
+  try {
+    const data = await fetchJson<{ banks?: BankPaybillOption[] }>(
+      '/api/payments/banks',
+      {},
+      6000
+    );
+    if (Array.isArray(data.banks) && data.banks.length > 0) {
+      return data.banks;
+    }
+    return FALLBACK_KENYAN_BANKS;
+  } catch {
+    return FALLBACK_KENYAN_BANKS;
+  }
+}
+
+export async function registerHostPayheroChannelOnApi(payload: {
+  eventId?: string;
+  payoutType: 'bank' | 'till' | 'paybill';
+  shortCode: string;
+  accountNumber?: string;
+  eventTitle: string;
+  hostName: string;
+}): Promise<{ success: boolean; channelId?: number; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/payments/register-host-channel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      success?: boolean;
+      channelId?: number;
+      error?: string;
+    };
+    if (!res.ok || !json.success || !json.channelId) {
+      return {
+        success: false,
+        error: json.error || `Could not register host channel (${res.status})`,
+      };
+    }
+    return { success: true, channelId: Number(json.channelId) };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Network error registering payout channel',
+    };
   }
 }
 

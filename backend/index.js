@@ -11,9 +11,11 @@ import {
   sendWelcomeEmail,
 } from './mailer.js';
 import {
+  fetchPayheroBankPaybills,
   initiatePayheroStkPush,
   isPayheroConfigured,
   normalizeKenyanPhone,
+  registerPayheroHostChannel,
 } from './payhero.js';
 
 const app = express();
@@ -297,6 +299,10 @@ app.post('/api/rooms', async (req, res) => {
       mpesa_number = null,
       mpesa_account = null,
       mpesa_name = null,
+      payout_type = null,
+      payhero_channel_id = null,
+      payout_short_code = null,
+      payout_account_number = null,
       activities = [],
       main_guests = [],
       sub_events = [],
@@ -328,12 +334,41 @@ app.post('/api/rooms', async (req, res) => {
       created_by,
     };
 
+    let resolvedChannelId =
+      payhero_channel_id && Number(payhero_channel_id) > 0
+        ? Number(payhero_channel_id)
+        : null;
+
+    if (
+      !resolvedChannelId &&
+      ['bank', 'till', 'paybill'].includes(String(payout_type || '')) &&
+      payout_short_code
+    ) {
+      try {
+        const reg = await registerPayheroHostChannel({
+          channelType: payout_type,
+          shortCode: payout_short_code,
+          accountNumber: payout_account_number || '',
+          description: `${name} - ${created_by || 'Monte Host'}`,
+        });
+        resolvedChannelId = reg.channelId;
+      } catch (regErr) {
+        console.warn('[payhero] Auto host channel registration warning:', regErr?.message);
+      }
+    }
+
     const fullPayload = {
       ...basePayload,
       ...(mpesa_type ? { mpesa_type } : {}),
       ...(mpesa_number ? { mpesa_number } : {}),
       ...(mpesa_account ? { mpesa_account } : {}),
       ...(mpesa_name ? { mpesa_name } : {}),
+      ...(payout_type ? { payout_type } : {}),
+      ...(resolvedChannelId ? { payhero_channel_id: resolvedChannelId } : {}),
+      ...(payout_short_code ? { payout_short_code: String(payout_short_code) } : {}),
+      ...(payout_account_number
+        ? { payout_account_number: String(payout_account_number) }
+        : {}),
       ...(host_email ? { host_email } : {}),
       ...(Array.isArray(activities) && activities.length > 0 ? { activities } : {}),
       ...(Array.isArray(main_guests) && main_guests.length > 0 ? { main_guests } : {}),
@@ -437,6 +472,14 @@ app.patch('/api/rooms/:id', async (req, res) => {
       'activities',
       'main_guests',
       'sub_events',
+      'mpesa_type',
+      'mpesa_number',
+      'mpesa_account',
+      'mpesa_name',
+      'payout_type',
+      'payhero_channel_id',
+      'payout_short_code',
+      'payout_account_number',
     ];
     const updates = {};
     for (const key of allowed) {
@@ -1233,14 +1276,86 @@ async function confirmAttendeePayment({
   }
 }
 
-// 1. POST /api/payments/stk-push — Authenticated PayHero Kenya M-PESA STK Push
+// 0. GET /api/payments/banks — Proxy PayHero Kenya bank paybills (with Kenyan bank fallback)
+app.get('/api/payments/banks', async (_req, res) => {
+  try {
+    const banks = await fetchPayheroBankPaybills();
+    return res.json({ success: true, banks });
+  } catch (err) {
+    console.error('GET /api/payments/banks failed:', err);
+    return res.status(500).json({ success: false, banks: [], error: err.message });
+  }
+});
+
+// 0b. POST /api/payments/register-host-channel — Register host's Bank/Till/Paybill on PayHero v2
+app.post('/api/payments/register-host-channel', async (req, res) => {
+  if (!requireSupabase(res)) return;
+  try {
+    const {
+      eventId,
+      payoutType,
+      shortCode,
+      accountNumber = '',
+      eventTitle = 'Monte Event',
+      hostName = 'Host',
+    } = req.body || {};
+
+    if (!['bank', 'till', 'paybill'].includes(String(payoutType || ''))) {
+      return res.status(400).json({
+        success: false,
+        error: 'payoutType must be "bank", "till", or "paybill" to register an instant STK Push channel.',
+      });
+    }
+    if (!shortCode) {
+      return res.status(400).json({
+        success: false,
+        error: 'shortCode (Bank Paybill, Till, or Paybill number) is required.',
+      });
+    }
+
+    const registered = await registerPayheroHostChannel({
+      channelType: payoutType,
+      shortCode,
+      accountNumber,
+      description: `${eventTitle} - ${hostName}`,
+    });
+
+    // Save channel_id and payout fields onto the event in Supabase (both rooms & events tables)
+    if (eventId && !String(eventId).startsWith('evt-')) {
+      const updatePayload = {
+        payout_type: payoutType,
+        payhero_channel_id: registered.channelId,
+        payout_short_code: registered.shortCode,
+        payout_account_number: registered.accountNumber || null,
+      };
+      await Promise.allSettled([
+        supabase.from('rooms').update(updatePayload).eq('id', String(eventId)),
+        supabase.from('events').update(updatePayload).eq('id', String(eventId)),
+      ]);
+    }
+
+    return res.json({
+      success: true,
+      channelId: registered.channelId,
+      shortCode: registered.shortCode,
+      accountNumber: registered.accountNumber,
+    });
+  } catch (err) {
+    console.error('POST /api/payments/register-host-channel failed:', err);
+    return res.status(err.statusCode || 500).json({
+      success: false,
+      error: err.message || 'Failed to register host payout channel on PayHero.',
+    });
+  }
+});
+
+// 1. POST /api/payments/stk-push — Authenticated PayHero Kenya M-PESA STK Push (Direct to Host Channel)
 app.post('/api/payments/stk-push', async (req, res) => {
   if (!requireSupabase(res)) return;
   if (!isPayheroConfigured()) {
     return res.status(503).json({
       success: false,
-      error:
-        'PayHero is not configured on the server yet (missing PAYHERO_AUTH_TOKEN or PAYHERO_CHANNEL_ID).',
+      error: 'PayHero is not configured on the server yet (missing PAYHERO_AUTH_TOKEN).',
     });
   }
 
@@ -1269,6 +1384,39 @@ app.post('/api/payments/stk-push', async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'eventId, amount, and phone are required.',
+      });
+    }
+
+    // Look up the event's direct host PayHero channel_id from Supabase (rooms first, then legacy events)
+    let eventRecord = null;
+    const { data: roomRow } = await supabase
+      .from('rooms')
+      .select('id, name, created_by, payout_type, payhero_channel_id, mpesa_number')
+      .eq('id', String(eventId))
+      .maybeSingle();
+    if (roomRow) {
+      eventRecord = roomRow;
+    } else {
+      const { data: evRow } = await supabase
+        .from('events')
+        .select('id, name, created_by, payout_type, payhero_channel_id')
+        .eq('id', String(eventId))
+        .maybeSingle();
+      if (evRow) eventRecord = evRow;
+    }
+
+    const hostChannelId = Number.parseInt(
+      String(eventRecord?.payhero_channel_id ?? ''),
+      10
+    );
+
+    if (!Number.isFinite(hostChannelId) || hostChannelId <= 0) {
+      const hostMpesa = eventRecord?.mpesa_number
+        ? ` (${eventRecord.mpesa_number})`
+        : '';
+      return res.status(400).json({
+        success: false,
+        error: `This event uses direct M-PESA Send Money${hostMpesa} instead of an instant STK Push channel. Please send your contribution directly to the host's M-PESA number and tap "I've Paid (Paste M-PESA Code)".`,
       });
     }
 
@@ -1335,9 +1483,10 @@ app.post('/api/payments/stk-push', async (req, res) => {
       phone: normalizedPhone,
       reference,
       customerName: resolvedName,
+      channelId: hostChannelId,
     });
 
-    return res.json({ success: true, reference });
+    return res.json({ success: true, reference, channelId: hostChannelId });
   } catch (err) {
     console.error('POST /api/payments/stk-push failed:', err);
     return res.status(err.statusCode || 500).json({

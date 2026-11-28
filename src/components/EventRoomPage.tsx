@@ -1,7 +1,8 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ArrowLeft,
+  Building2,
   Calendar,
   CalendarPlus,
   Check,
@@ -33,14 +34,18 @@ import {
   X,
 } from 'lucide-react';
 import {
+  BankPaybillOption,
   ChatMessage,
   EventRoomTab,
   ExpenseCategory,
   Guest,
   MediaItem,
   MonteEvent,
+  MpesaType,
+  PayoutType,
   UserProfile,
 } from '../types';
+import { FALLBACK_KENYAN_BANKS, fetchKenyanBanksFromApi } from '../lib/api';
 import { formatDateShort, formatKES } from '../data/sampleData';
 import { motion } from 'motion/react';
 import { uploadFileToStorage } from '../lib/monteService';
@@ -89,6 +94,14 @@ interface EventRoomPageProps {
       totalBudget?: number;
       maxGuests?: number;
       costPerPerson?: number;
+      mpesaType?: MpesaType;
+      mpesaNumber?: string;
+      mpesaAccount?: string;
+      mpesaName?: string;
+      payoutType?: PayoutType;
+      payheroChannelId?: number | null;
+      payoutShortCode?: string;
+      payoutAccountNumber?: string;
     }
   ) => void;
   onUploadMedia: (eventId: string, items: MediaItem[]) => void;
@@ -150,6 +163,93 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
   const [mpesaModalGuest, setMpesaModalGuest] = useState<Guest | null>(null);
   const [mpesaCodeInput, setMpesaCodeInput] = useState('');
   const [stkPayModalOpen, setStkPayModalOpen] = useState(false);
+  const [editingPayout, setEditingPayout] = useState(false);
+  const [banks, setBanks] = useState<BankPaybillOption[]>(FALLBACK_KENYAN_BANKS);
+  const [draftPayoutType, setDraftPayoutType] = useState<PayoutType>(
+    event.payoutType ||
+      (event.mpesaType === 'till'
+        ? 'till'
+        : event.mpesaType === 'paybill'
+        ? 'paybill'
+        : 'personal_mpesa')
+  );
+  const [draftBankPaybill, setDraftBankPaybill] = useState(
+    event.payoutType === 'bank' && event.payoutShortCode
+      ? event.payoutShortCode
+      : '522522'
+  );
+  const [draftShortCode, setDraftShortCode] = useState(event.payoutShortCode || '');
+  const [draftAccountNumber, setDraftAccountNumber] = useState(
+    event.payoutAccountNumber || event.mpesaAccount || ''
+  );
+  const [draftPersonalPhone, setDraftPersonalPhone] = useState(
+    event.payoutType === 'personal_mpesa' || !event.payoutType
+      ? event.mpesaNumber || ''
+      : ''
+  );
+  const [draftPayoutName, setDraftPayoutName] = useState(
+    event.mpesaName || event.createdBy
+  );
+
+  useEffect(() => {
+    if (!editingPayout) return;
+    void fetchKenyanBanksFromApi().then((list) => {
+      if (list.length > 0) setBanks(list);
+    });
+  }, [editingPayout]);
+
+  const hasDirectStkChannel = Boolean(
+    event.payheroChannelId && event.payheroChannelId > 0
+  );
+
+  const handleSavePayout = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onUpdateRoom) return;
+    const selectedBank = banks.find((b) => b.paybill === draftBankPaybill);
+    const resolvedShortCode =
+      draftPayoutType === 'bank'
+        ? draftBankPaybill
+        : draftPayoutType === 'till' || draftPayoutType === 'paybill'
+        ? draftShortCode.trim()
+        : '';
+    const resolvedAccountNumber =
+      draftPayoutType === 'bank' || draftPayoutType === 'paybill'
+        ? draftAccountNumber.trim()
+        : '';
+
+    if (draftPayoutType !== 'personal_mpesa' && !resolvedShortCode) {
+      onShowToast('Please enter a valid Bank, Till, or Paybill number.');
+      return;
+    }
+    if (draftPayoutType === 'personal_mpesa' && !draftPersonalPhone.trim()) {
+      onShowToast('Please enter your M-PESA phone number.');
+      return;
+    }
+
+    onUpdateRoom(event.id, {
+      payoutType: draftPayoutType,
+      payoutShortCode: resolvedShortCode || undefined,
+      payoutAccountNumber: resolvedAccountNumber || undefined,
+      payheroChannelId: draftPayoutType === 'personal_mpesa' ? null : undefined,
+      mpesaType:
+        draftPayoutType === 'till'
+          ? 'till'
+          : draftPayoutType === 'paybill' || draftPayoutType === 'bank'
+          ? 'paybill'
+          : 'phone',
+      mpesaNumber:
+        draftPayoutType === 'personal_mpesa'
+          ? draftPersonalPhone.trim()
+          : resolvedShortCode,
+      mpesaAccount: resolvedAccountNumber || undefined,
+      mpesaName:
+        draftPayoutName.trim() ||
+        (draftPayoutType === 'bank' && selectedBank
+          ? selectedBank.name
+          : event.createdBy),
+    });
+    setEditingPayout(false);
+  };
 
   const currentUserGuest = useMemo(
     () =>
@@ -747,103 +847,247 @@ export const EventRoomPage: React.FC<EventRoomPageProps> = ({
       {/* TAB 1: GUESTS */}
       {activeTab === 'guests' && (
         <div className="space-y-4">
-          {/* Pay via M-PESA Card — Always visible whenever costPerPerson > 0 or mpesaNumber is set */}
-          {(event.mpesaNumber || event.costPerPerson > 0) && (
-            <div className="rounded-3xl border border-emerald-500/35 bg-gradient-to-r from-emerald-500/10 via-white to-[#F0F6FF] dark:from-emerald-500/15 dark:via-[#13224A] dark:to-[#0B1A3A] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-start gap-3.5 min-w-0">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-sm">
-                  <Smartphone className="h-5 w-5" />
-                </span>
-                <div className="min-w-0">
-                  <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-                    Pay via M-PESA ·{' '}
-                    {event.mpesaNumber
-                      ? event.mpesaType === 'till'
-                        ? 'Buy Goods Till'
-                        : event.mpesaType === 'paybill'
-                        ? 'Paybill'
-                        : event.mpesaType === 'pochi'
-                        ? 'Pochi la Biashara'
-                        : 'Send Money'
-                      : 'Instant STK Push'}
-                  </span>
-                  <div className="mt-1 flex items-center gap-2 flex-wrap">
-                    <p className="text-lg sm:text-xl font-extrabold font-mono text-[#0A1E5C] dark:text-white tracking-wide">
-                      {event.mpesaNumber || `M-PESA • ${formatKES(event.costPerPerson)}`}
-                    </p>
-                    {event.mpesaNumber && (
-                      <button
-                        type="button"
-                        onClick={handleCopyMpesa}
-                        title="Copy M-PESA number"
-                        aria-label="Copy M-PESA number"
-                        className="inline-flex items-center gap-1 rounded-lg border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white/80 dark:bg-[#0B1A3A] hover:border-emerald-500 px-2 py-1 text-[10px] font-bold text-[#0A1E5C]/70 dark:text-white/75 transition"
-                      >
-                        {copiedMpesa ? (
-                          <>
-                            <Check className="h-3 w-3 text-emerald-500" />
-                            Copied
-                          </>
-                        ) : (
-                          <Copy className="h-3 w-3" />
-                        )}
-                      </button>
+          {/* Pay via M-PESA Card — Routes directly to host's Bank/Till/Paybill STK channel OR personal M-PESA */}
+          {(event.mpesaNumber || event.payoutShortCode || event.costPerPerson > 0) && (
+            <div className="rounded-3xl border border-emerald-500/35 bg-gradient-to-r from-emerald-500/10 via-white to-[#F0F6FF] dark:from-emerald-500/15 dark:via-[#13224A] dark:to-[#0B1A3A] p-4 sm:p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-3.5 min-w-0">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-sm">
+                    {event.payoutType === 'bank' ? (
+                      <Building2 className="h-5 w-5" />
+                    ) : (
+                      <Smartphone className="h-5 w-5" />
                     )}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                        Pay via M-PESA ·{' '}
+                        {event.payoutType === 'bank'
+                          ? 'Host Bank Account'
+                          : event.payoutType === 'till' || event.mpesaType === 'till'
+                          ? 'Host M-PESA Till'
+                          : event.payoutType === 'paybill' || event.mpesaType === 'paybill'
+                          ? 'Host M-PESA Paybill'
+                          : 'Direct Send Money'}
+                      </span>
+                      {isHost && onUpdateRoom && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingPayout((v) => !v)}
+                          className="inline-flex items-center gap-1 rounded-full border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-white dark:bg-[#0B1A3A] px-2.5 py-0.5 text-[10px] font-extrabold text-[#1A6BFF] dark:text-[#2B7FFF] hover:border-[#1A6BFF] transition"
+                        >
+                          <Pencil className="h-2.5 w-2.5" />
+                          {editingPayout ? 'Close' : 'Edit Payout'}
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="mt-1 flex items-center gap-2 flex-wrap">
+                      <p className="text-lg sm:text-xl font-extrabold font-mono text-[#0A1E5C] dark:text-white tracking-wide">
+                        {event.mpesaNumber ||
+                          event.payoutShortCode ||
+                          `M-PESA • ${formatKES(event.costPerPerson)}`}
+                      </p>
+                      {(event.mpesaNumber || event.payoutShortCode) && (
+                        <button
+                          type="button"
+                          onClick={handleCopyMpesa}
+                          title="Copy M-PESA number"
+                          aria-label="Copy M-PESA number"
+                          className="inline-flex items-center gap-1 rounded-lg border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white/80 dark:bg-[#0B1A3A] hover:border-emerald-500 px-2 py-1 text-[10px] font-bold text-[#0A1E5C]/70 dark:text-white/75 transition"
+                        >
+                          {copiedMpesa ? (
+                            <>
+                              <Check className="h-3 w-3 text-emerald-500" />
+                              Copied
+                            </>
+                          ) : (
+                            <Copy className="h-3 w-3" />
+                          )}
+                        </button>
+                      )}
+                    </div>
+
+                    <p className="text-xs text-[#0A1E5C]/70 dark:text-white/70 mt-0.5">
+                      {event.payoutAccountNumber || event.mpesaAccount
+                        ? `Account: ${event.payoutAccountNumber || event.mpesaAccount} • `
+                        : ''}
+                      {event.mpesaName
+                        ? `Recipient: ${event.mpesaName} • `
+                        : `Host: ${event.createdBy} • `}
+                      Amount:{' '}
+                      <span className="font-extrabold text-[#1A6BFF] dark:text-[#2B7FFF]">
+                        {formatKES(event.costPerPerson)}
+                      </span>
+                    </p>
+
+                    <p className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 mt-1">
+                      {hasDirectStkChannel
+                        ? `✓ Instant STK Push goes straight to ${event.createdBy}'s ${
+                            event.payoutType === 'bank'
+                              ? 'Bank Account'
+                              : event.payoutType === 'till'
+                              ? 'M-PESA Till'
+                              : 'M-PESA Paybill'
+                          }.`
+                        : 'Send directly to the host’s M-PESA number above, then tap "I’ve Paid" to submit your M-PESA code.'}
+                    </p>
                   </div>
-                  <p className="text-xs text-[#0A1E5C]/70 dark:text-white/70 mt-0.5">
-                    {event.mpesaAccount ? `Account: ${event.mpesaAccount} • ` : ''}
-                    {event.mpesaName
-                      ? `Name: ${event.mpesaName} • `
-                      : `Host: ${event.createdBy} • `}
-                    Amount:{' '}
-                    <span className="font-extrabold text-[#1A6BFF] dark:text-[#2B7FFF]">
-                      {formatKES(event.costPerPerson)}
-                    </span>
-                  </p>
+                </div>
+
+                <div className="w-full sm:w-auto shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  {hasDirectStkChannel && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (user.memberSince === 'Preview Mode') {
+                          onPromptGuestPay?.();
+                          return;
+                        }
+                        setStkPayModalOpen(true);
+                      }}
+                      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 px-5 py-3 text-xs sm:text-sm font-extrabold text-white shadow-lg transition active:scale-95"
+                    >
+                      <Smartphone className="h-4 w-4" />
+                      Pay {formatKES(event.costPerPerson)}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (user.memberSince === 'Preview Mode') {
+                        onPromptGuestPay?.();
+                        return;
+                      }
+                      const targetGuest: Guest = currentUserGuest || {
+                        id: `g-self-${Date.now()}`,
+                        name: user.name,
+                        phone: user.phone || '',
+                        email: user.email,
+                        initials: user.initials,
+                        avatarColor: '#1A6BFF',
+                        amount: event.costPerPerson,
+                        paid: false,
+                        online: true,
+                      };
+                      setMpesaCodeInput(targetGuest.mpesaCode || '');
+                      setMpesaModalGuest(targetGuest);
+                    }}
+                    className={`w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-2xl px-4 py-3 text-xs font-extrabold transition active:scale-95 ${
+                      hasDirectStkChannel
+                        ? 'border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-white dark:bg-[#0B1A3A] hover:border-[#1A6BFF] text-[#0A1E5C] dark:text-white'
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg'
+                    }`}
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    I&apos;ve Paid (Paste M-PESA Code)
+                  </button>
                 </div>
               </div>
-              <div className="w-full sm:w-auto shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (user.memberSince === 'Preview Mode') {
-                      onPromptGuestPay?.();
-                      return;
-                    }
-                    setStkPayModalOpen(true);
-                  }}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 px-5 py-3 text-xs sm:text-sm font-extrabold text-white shadow-lg transition active:scale-95"
+
+              {/* Inline Host Payout Editor */}
+              {isHost && editingPayout && (
+                <form
+                  onSubmit={handleSavePayout}
+                  className="rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#0B1A3A] p-4 space-y-3"
                 >
-                  <Smartphone className="h-4 w-4" />
-                  Pay {formatKES(event.costPerPerson)}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (user.memberSince === 'Preview Mode') {
-                      onPromptGuestPay?.();
-                      return;
-                    }
-                    const targetGuest: Guest = currentUserGuest || {
-                      id: `g-self-${Date.now()}`,
-                      name: user.name,
-                      phone: user.phone || '',
-                      email: user.email,
-                      initials: user.initials,
-                      avatarColor: '#1A6BFF',
-                      amount: event.costPerPerson,
-                      paid: false,
-                      online: true,
-                    };
-                    setMpesaCodeInput(targetGuest.mpesaCode || '');
-                    setMpesaModalGuest(targetGuest);
-                  }}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-white dark:bg-[#0B1A3A] hover:border-[#1A6BFF] px-4 py-3 text-xs font-extrabold text-[#0A1E5C] dark:text-white transition active:scale-95"
-                >
-                  <CheckCircle2 className="h-4 w-4 text-[#1A6BFF]" />
-                  I&apos;ve Paid (Paste M-PESA Code)
-                </button>
-              </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(
+                      [
+                        { id: 'bank', label: 'Bank Account (STK)' },
+                        { id: 'till', label: 'M-PESA Till (STK)' },
+                        { id: 'paybill', label: 'M-PESA Paybill (STK)' },
+                        { id: 'personal_mpesa', label: 'Personal Phone (Manual)' },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setDraftPayoutType(opt.id)}
+                        className={`rounded-xl px-3 py-1.5 text-xs font-extrabold border transition ${
+                          draftPayoutType === opt.id
+                            ? 'border-emerald-600 bg-emerald-600 text-white'
+                            : 'border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF] dark:bg-[#13224A] text-[#0A1E5C] dark:text-white'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    {draftPayoutType === 'bank' && (
+                      <select
+                        value={draftBankPaybill}
+                        onChange={(e) => setDraftBankPaybill(e.target.value)}
+                        className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#13224A] px-3 py-2 text-xs font-bold text-[#0A1E5C] dark:text-white"
+                      >
+                        {banks.map((b) => (
+                          <option key={`${b.name}-${b.paybill}`} value={b.paybill}>
+                            {b.name} ({b.paybill})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    {(draftPayoutType === 'till' || draftPayoutType === 'paybill') && (
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={draftShortCode}
+                        onChange={(e) => setDraftShortCode(e.target.value.replace(/[^0-9]/g, ''))}
+                        placeholder={draftPayoutType === 'till' ? 'Till Number' : 'Paybill Number'}
+                        className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#13224A] px-3 py-2 text-xs text-[#0A1E5C] dark:text-white"
+                      />
+                    )}
+
+                    {(draftPayoutType === 'bank' || draftPayoutType === 'paybill') && (
+                      <input
+                        type="text"
+                        value={draftAccountNumber}
+                        onChange={(e) => setDraftAccountNumber(e.target.value)}
+                        placeholder="Account Number"
+                        className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#13224A] px-3 py-2 text-xs text-[#0A1E5C] dark:text-white"
+                      />
+                    )}
+
+                    {draftPayoutType === 'personal_mpesa' && (
+                      <input
+                        type="tel"
+                        value={draftPersonalPhone}
+                        onChange={(e) => setDraftPersonalPhone(e.target.value)}
+                        placeholder="M-PESA Phone (07XX...)"
+                        className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#13224A] px-3 py-2 text-xs text-[#0A1E5C] dark:text-white"
+                      />
+                    )}
+
+                    <input
+                      type="text"
+                      value={draftPayoutName}
+                      onChange={(e) => setDraftPayoutName(e.target.value)}
+                      placeholder="Account / Recipient Name"
+                      className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF]/60 dark:bg-[#13224A] px-3 py-2 text-xs text-[#0A1E5C] dark:text-white"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingPayout(false)}
+                      className="rounded-xl px-3 py-1.5 text-xs font-bold text-[#0A1E5C]/70 dark:text-white/70"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-1.5 text-xs font-extrabold text-white"
+                    >
+                      Save Payout Channel
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           )}
 

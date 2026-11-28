@@ -629,6 +629,13 @@ export async function loadRoomsDirectlyFromSupabase(): Promise<MonteEvent[] | nu
       mpesaNumber: r.mpesa_number || undefined,
       mpesaAccount: r.mpesa_account || undefined,
       mpesaName: r.mpesa_name || undefined,
+      payoutType: r.payout_type || undefined,
+      payheroChannelId:
+        r.payhero_channel_id !== null && r.payhero_channel_id !== undefined
+          ? Number(r.payhero_channel_id)
+          : null,
+      payoutShortCode: r.payout_short_code || undefined,
+      payoutAccountNumber: r.payout_account_number || undefined,
       activities: Array.isArray(r.activities) ? r.activities : [],
       mainGuests: Array.isArray(r.main_guests) ? r.main_guests : [],
       subEvents: Array.isArray(r.sub_events) ? r.sub_events : [],
@@ -667,6 +674,12 @@ export async function createRoomDirectlyInSupabase(
       ...(event.mpesaNumber ? { mpesa_number: event.mpesaNumber } : {}),
       ...(event.mpesaAccount ? { mpesa_account: event.mpesaAccount } : {}),
       ...(event.mpesaName ? { mpesa_name: event.mpesaName } : {}),
+      ...(event.payoutType ? { payout_type: event.payoutType } : {}),
+      ...(event.payheroChannelId ? { payhero_channel_id: event.payheroChannelId } : {}),
+      ...(event.payoutShortCode ? { payout_short_code: event.payoutShortCode } : {}),
+      ...(event.payoutAccountNumber
+        ? { payout_account_number: event.payoutAccountNumber }
+        : {}),
       ...(event.activities && event.activities.length > 0
         ? { activities: event.activities }
         : {}),

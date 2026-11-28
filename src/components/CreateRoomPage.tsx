@@ -1,7 +1,8 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
+  Building2,
   Calendar,
   CalendarPlus,
   Check,
@@ -28,6 +29,7 @@ import {
 import { EVENT_TYPES, formatKES } from '../data/sampleData';
 import { AnimatePresence, motion } from 'motion/react';
 import {
+  BankPaybillOption,
   EventType,
   ExpenseCategory,
   ExpenseItem,
@@ -35,8 +37,10 @@ import {
   MainGuest,
   MonteEvent,
   MpesaType,
+  PayoutType,
   SubEvent,
 } from '../types';
+import { FALLBACK_KENYAN_BANKS, fetchKenyanBanksFromApi } from '../lib/api';
 import { uploadFileToStorage } from '../lib/monteService';
 import { ThemeToggle } from './ThemeToggle';
 import { EASE_SKIPER, SPRING_POP } from './MotionPrimitives';
@@ -181,11 +185,20 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
   const [manualName, setManualName] = useState('');
   const [manualPhone, setManualPhone] = useState('');
   const [manualEmail, setManualEmail] = useState('');
-  const [mpesaType, setMpesaType] = useState<MpesaType>('phone');
+  const [payoutType, setPayoutType] = useState<PayoutType>('personal_mpesa');
+  const [banks, setBanks] = useState<BankPaybillOption[]>(FALLBACK_KENYAN_BANKS);
+  const [selectedBankPaybill, setSelectedBankPaybill] = useState<string>('522522');
+  const [payoutShortCode, setPayoutShortCode] = useState('');
+  const [payoutAccountNumber, setPayoutAccountNumber] = useState('');
   const [mpesaNumber, setMpesaNumber] = useState('');
-  const [mpesaAccount, setMpesaAccount] = useState('');
   const [mpesaName, setMpesaName] = useState(creatorName);
   const [copiedLink, setCopiedLink] = useState(false);
+
+  useEffect(() => {
+    void fetchKenyanBanksFromApi().then((list) => {
+      if (list.length > 0) setBanks(list);
+    });
+  }, []);
 
   const inviteCode = useMemo(
     () => `MONTE-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
@@ -418,6 +431,34 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
         else breakdown.Misc += ex.amount;
       }
 
+      const selectedBank = banks.find((b) => b.paybill === selectedBankPaybill);
+      const resolvedShortCode =
+        payoutType === 'bank'
+          ? selectedBankPaybill
+          : payoutType === 'till' || payoutType === 'paybill'
+          ? payoutShortCode.trim()
+          : '';
+      const resolvedAccountNumber =
+        payoutType === 'bank' || payoutType === 'paybill'
+          ? payoutAccountNumber.trim()
+          : '';
+      const resolvedMpesaType: MpesaType | undefined =
+        payoutType === 'till'
+          ? 'till'
+          : payoutType === 'paybill' || payoutType === 'bank'
+          ? 'paybill'
+          : mpesaNumber.trim()
+          ? 'phone'
+          : undefined;
+      const resolvedDisplayNumber =
+        payoutType === 'personal_mpesa'
+          ? mpesaNumber.trim() || undefined
+          : resolvedShortCode || undefined;
+      const hasPayoutDetails =
+        payoutType === 'personal_mpesa'
+          ? Boolean(mpesaNumber.trim())
+          : Boolean(resolvedShortCode);
+
       const newEvent: MonteEvent = {
         id: eventId,
         name: finalName,
@@ -441,13 +482,16 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
         createdBy: creatorName,
         hostId: creatorId || undefined,
         hostEmail: creatorEmail || undefined,
-        mpesaType: mpesaNumber.trim() ? mpesaType : undefined,
-        mpesaNumber: mpesaNumber.trim() || undefined,
-        mpesaAccount:
-          mpesaType === 'paybill' && mpesaAccount.trim()
-            ? mpesaAccount.trim()
-            : undefined,
-        mpesaName: mpesaName.trim() || undefined,
+        mpesaType: resolvedMpesaType,
+        mpesaNumber: resolvedDisplayNumber,
+        mpesaAccount: resolvedAccountNumber || undefined,
+        mpesaName:
+          mpesaName.trim() ||
+          (payoutType === 'bank' && selectedBank ? selectedBank.name : undefined),
+        payoutType: hasPayoutDetails ? payoutType : undefined,
+        payheroChannelId: null,
+        payoutShortCode: resolvedShortCode || undefined,
+        payoutAccountNumber: resolvedAccountNumber || undefined,
         activities,
         mainGuests,
         subEvents,
@@ -1283,73 +1327,163 @@ export const CreateRoomPage: React.FC<CreateRoomPageProps> = ({
                 )}
               </div>
 
-              {/* Optional Host M-PESA Payment Details */}
-              <div className="rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] p-4 space-y-3">
+              {/* Host Direct Payout Details (Instant STK Push vs Manual M-PESA) */}
+              <div className="rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#F0F6FF]/60 dark:bg-[#0B1A3A] p-4 space-y-3.5">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2 text-sm font-extrabold text-[#0A1E5C] dark:text-white">
                     <Smartphone className="h-4 w-4 text-emerald-500" />
-                    Host M-PESA Details (Optional)
+                    Host Payout Details (Payments Go Straight to You)
                   </div>
-                  <span className="text-[11px] font-semibold text-[#0A1E5C]/60 dark:text-white/60">
-                    Guests can copy &amp; submit confirmation codes
+                  <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                    100% direct to host
                   </span>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {(
-                    [
-                      { id: 'phone', label: 'Send Money' },
-                      { id: 'till', label: 'Till Number' },
-                      { id: 'paybill', label: 'Paybill' },
-                      { id: 'pochi', label: 'Pochi la Biashara' },
-                    ] as const
-                  ).map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setMpesaType(opt.id)}
-                      className={`rounded-xl px-3 py-1.5 text-xs font-extrabold border transition ${
-                        mpesaType === opt.id
-                          ? 'border-[#1A6BFF] bg-[#1A6BFF] text-white'
-                          : 'border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] text-[#0A1E5C] dark:text-white'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
+                {/* Option A vs Option B Selector */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (payoutType === 'personal_mpesa') setPayoutType('bank');
+                    }}
+                    className={`rounded-2xl border p-3 text-left transition ${
+                      payoutType !== 'personal_mpesa'
+                        ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500/40'
+                        : 'border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span className="text-xs font-extrabold text-[#0A1E5C] dark:text-white">
+                        Option A: Instant M-PESA STK Push
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#0A1E5C]/65 dark:text-white/65 mt-1">
+                      Bank Account, M-PESA Till, or Paybill — guests tap Pay &amp; money goes straight to your account.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPayoutType('personal_mpesa')}
+                    className={`rounded-2xl border p-3 text-left transition ${
+                      payoutType === 'personal_mpesa'
+                        ? 'border-[#1A6BFF] bg-[#1A6BFF]/10 ring-1 ring-[#1A6BFF]/40'
+                        : 'border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Smartphone className="h-4 w-4 text-[#1A6BFF] shrink-0" />
+                      <span className="text-xs font-extrabold text-[#0A1E5C] dark:text-white">
+                        Option B: Manual M-PESA Send Money
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#0A1E5C]/65 dark:text-white/65 mt-1">
+                      Personal phone number (07.../01...) — guests send directly to your phone &amp; paste their M-PESA code.
+                    </p>
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <input
-                    type="text"
-                    value={mpesaNumber}
-                    onChange={(e) => setMpesaNumber(e.target.value)}
-                    placeholder={
-                      mpesaType === 'paybill'
-                        ? 'Paybill Business No.'
-                        : mpesaType === 'till'
-                        ? 'Buy Goods Till No.'
-                        : 'Phone (07XX XXX XXX)'
-                    }
-                    className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                  />
-                  {mpesaType === 'paybill' && (
+                {/* Option A Sub-types */}
+                {payoutType !== 'personal_mpesa' && (
+                  <div className="space-y-3 pt-1">
+                    <div className="flex flex-wrap gap-2">
+                      {(
+                        [
+                          { id: 'bank', label: 'Bank Account' },
+                          { id: 'till', label: 'M-PESA Till' },
+                          { id: 'paybill', label: 'M-PESA Paybill' },
+                        ] as const
+                      ).map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setPayoutType(opt.id)}
+                          className={`rounded-xl px-3.5 py-1.5 text-xs font-extrabold border transition ${
+                            payoutType === opt.id
+                              ? 'border-emerald-600 bg-emerald-600 text-white'
+                              : 'border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] text-[#0A1E5C] dark:text-white'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      {payoutType === 'bank' ? (
+                        <select
+                          value={selectedBankPaybill}
+                          onChange={(e) => setSelectedBankPaybill(e.target.value)}
+                          className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm font-bold text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                        >
+                          {banks.map((b) => (
+                            <option key={`${b.name}-${b.paybill}`} value={b.paybill}>
+                              {b.name} ({b.paybill})
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={payoutShortCode}
+                          onChange={(e) =>
+                            setPayoutShortCode(e.target.value.replace(/[^0-9]/g, ''))
+                          }
+                          placeholder={
+                            payoutType === 'till'
+                              ? 'M-PESA Till Number'
+                              : 'Paybill Number (e.g. 400200)'
+                          }
+                          className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                        />
+                      )}
+
+                      {(payoutType === 'bank' || payoutType === 'paybill') && (
+                        <input
+                          type="text"
+                          value={payoutAccountNumber}
+                          onChange={(e) => setPayoutAccountNumber(e.target.value)}
+                          placeholder={
+                            payoutType === 'bank'
+                              ? 'Bank Account Number'
+                              : 'Paybill Account Number'
+                          }
+                          className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                        />
+                      )}
+
+                      <input
+                        type="text"
+                        value={mpesaName}
+                        onChange={(e) => setMpesaName(e.target.value)}
+                        placeholder="Account Holder Name"
+                        className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Option B: Personal M-PESA Send Money */}
+                {payoutType === 'personal_mpesa' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                     <input
-                      type="text"
-                      value={mpesaAccount}
-                      onChange={(e) => setMpesaAccount(e.target.value)}
-                      placeholder="Account Name / Number"
+                      type="tel"
+                      value={mpesaNumber}
+                      onChange={(e) => setMpesaNumber(e.target.value)}
+                      placeholder="Your M-PESA Phone (e.g. 0712 345 678)"
                       className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
                     />
-                  )}
-                  <input
-                    type="text"
-                    value={mpesaName}
-                    onChange={(e) => setMpesaName(e.target.value)}
-                    placeholder="Recipient / Account Name"
-                    className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
-                  />
-                </div>
+                    <input
+                      type="text"
+                      value={mpesaName}
+                      onChange={(e) => setMpesaName(e.target.value)}
+                      placeholder="Recipient Name (shown to guests)"
+                      className="rounded-xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-white dark:bg-[#13224A] px-3 py-2 text-xs sm:text-sm text-[#0A1E5C] dark:text-white focus:border-[#1A6BFF] focus:outline-none"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Invite Link Box */}
