@@ -89,6 +89,14 @@ import { MediaVaultPage } from './components/MediaVaultPage';
 import { ProfilePage } from './components/ProfilePage';
 import { MediaLightbox } from './components/MediaLightbox';
 import { ToastContainer, ToastData } from './components/Toast';
+import { AppUpdateInfo, checkForAppUpdate } from './lib/appVersion';
+import { isNativeApp } from './lib/nativeApp';
+import {
+  NotificationPermissionState,
+  getNotificationPermissionStatus,
+  requestNotificationPermission,
+  sendDeviceNotification,
+} from './lib/notifications';
 
 function getCurrentTimeLabel(): string {
   return new Date().toLocaleTimeString([], {
@@ -521,6 +529,112 @@ function MonteAppContent() {
   } | null>(null);
   const [flyerEvent, setFlyerEvent] = useState<MonteEvent | null>(null);
   const [toasts, setToasts] = useState<ToastData[]>([]);
+  const [appUpdateInfo, setAppUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [notifPermission, setNotifPermission] =
+    useState<NotificationPermissionState>('prompt');
+
+  const pushNotification = useCallback(
+    (payload: { id?: string; title: string; body: string; eventId?: string }) => {
+      const id = payload.id || `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      setNotifications((prev) => {
+        if (prev.some((n) => n.id === id)) return prev;
+        return [
+          {
+            id,
+            title: payload.title,
+            body: payload.body,
+            time: getCurrentTimeLabel(),
+            read: false,
+            eventId: payload.eventId,
+          },
+          ...prev,
+        ].slice(0, 30);
+      });
+      void sendDeviceNotification({ title: payload.title, body: payload.body });
+    },
+    []
+  );
+
+  const handleCheckAppUpdate = useCallback(async () => {
+    const info = await checkForAppUpdate();
+    setAppUpdateInfo(info);
+    if (info.hasUpdate) {
+      pushNotification({
+        id: `app-update-${info.latestVersion}`,
+        title: `Monte Events v${info.latestVersion} Available!`,
+        body: 'A new update is ready with the latest features and fixes. Tap the Update card to install.',
+      });
+    }
+  }, [pushNotification]);
+
+  const handleEnableNotifications = useCallback(async () => {
+    const granted = await requestNotificationPermission();
+    const status = await getNotificationPermissionStatus();
+    setNotifPermission(status);
+    if (granted) {
+      showToast('Device notifications enabled!');
+      void sendDeviceNotification({
+        title: 'Monte Events Notifications Active',
+        body: 'You will now receive alerts for app updates, new rooms, unpaid events, and M-PESA confirmations.',
+      });
+    } else {
+      showToast('Enable notifications in your phone or browser settings.', 'info');
+    }
+  }, []);
+
+  // Check for app updates + notification permissions on mount
+  useEffect(() => {
+    void handleCheckAppUpdate();
+    void getNotificationPermissionStatus().then((status) => {
+      setNotifPermission(status);
+      if (isNativeApp() && status === 'prompt') {
+        void requestNotificationPermission().then(async () => {
+          setNotifPermission(await getNotificationPermissionStatus());
+        });
+      }
+    });
+  }, [handleCheckAppUpdate]);
+
+  // Surface unpaid / pending event reminders in the Notification Bell
+  useEffect(() => {
+    if (events.length === 0 || isGuestMode) return;
+    setNotifications((prev) => {
+      const existingIds = new Set(prev.map((n) => n.id));
+      const additions: NotificationItem[] = [];
+      for (const ev of events) {
+        if (ev.costPerPerson <= 0) continue;
+        const unpaidGuests = ev.guests.filter((g) => !g.paid);
+        const meGuest = ev.guests.find(
+          (g) =>
+            (user.email && g.email && g.email.toLowerCase() === user.email.toLowerCase()) ||
+            g.name.toLowerCase() === user.name.toLowerCase()
+        );
+        const id = `unpaid-${ev.id}`;
+        if (existingIds.has(id)) continue;
+        if (meGuest && !meGuest.paid) {
+          additions.push({
+            id,
+            title: `Unpaid Event: ${ev.name}`,
+            body: `Your contribution of KES ${ev.costPerPerson.toLocaleString()} is still pending. Tap to pay via M-PESA.`,
+            time: 'Reminder',
+            read: false,
+            eventId: ev.id,
+          });
+        } else if (unpaidGuests.length > 0) {
+          additions.push({
+            id,
+            title: `Pending Payments: ${ev.name}`,
+            body: `${unpaidGuests.length} guest${unpaidGuests.length === 1 ? '' : 's'} still pending (KES ${ev.costPerPerson.toLocaleString()}/person).`,
+            time: 'Reminder',
+            read: false,
+            eventId: ev.id,
+          });
+        }
+      }
+      if (additions.length === 0) return prev;
+      return [...additions, ...prev].slice(0, 30);
+    });
+  }, [events, isGuestMode, user.email, user.name]);
 
   const handleSelectMedia = useCallback(
     (item: MediaItem, list?: MediaItem[], explicitIndex?: number) => {
@@ -816,6 +930,12 @@ function MonteAppContent() {
     setActiveEventTab('guests');
     setCurrentPage('event-room');
     setFlyerEvent(newEvent);
+    pushNotification({
+      id: `created-${newEvent.inviteCode}`,
+      title: `Room Created: ${newEvent.name}`,
+      body: `Hosted by ${newEvent.createdBy} · KES ${newEvent.costPerPerson.toLocaleString()}/person. Share your flyer to invite guests!`,
+      eventId: newEvent.id,
+    });
     showToast(`Room "${newEvent.name}" created! Your Event Flyer is ready.`);
   };
 
@@ -1549,6 +1669,10 @@ function MonteAppContent() {
               media={media}
               notifications={notifications}
               apiStatus={apiStatus}
+              updateInfo={appUpdateInfo}
+              notifPermission={notifPermission}
+              onCheckUpdate={handleCheckAppUpdate}
+              onEnableNotifications={handleEnableNotifications}
               onMarkNotificationsRead={handleMarkNotificationsRead}
               onOpenEvent={handleOpenEvent}
               onNavigate={handleNavigate}
@@ -1736,6 +1860,10 @@ function MonteAppContent() {
               media={media}
               supabaseStatus={supabaseStatus}
               isGuestMode={isGuestMode}
+              updateInfo={appUpdateInfo}
+              notifPermission={notifPermission}
+              onCheckUpdate={handleCheckAppUpdate}
+              onEnableNotifications={handleEnableNotifications}
               onPromptAuth={promptGuestToSignUp}
               onUpdateProfile={handleUpdateProfile}
               onOpenEvent={handleOpenEvent}

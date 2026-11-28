@@ -32,6 +32,9 @@ import { motion } from 'motion/react';
 import { MonteLogo } from './MonteLogo';
 import { ThemeToggle } from './ThemeToggle';
 import { DownloadAppCard } from './DownloadAppCard';
+import { AppUpdateCard } from './AppUpdateCard';
+import { AppUpdateInfo } from '../lib/appVersion';
+import { NotificationPermissionState } from '../lib/notifications';
 import { SPRING_SNAPPY } from './MotionPrimitives';
 
 interface ProfilePageProps {
@@ -40,6 +43,10 @@ interface ProfilePageProps {
   media: MediaItem[];
   supabaseStatus: { connected: boolean; schemaReady: boolean };
   isGuestMode?: boolean;
+  updateInfo?: AppUpdateInfo | null;
+  notifPermission?: NotificationPermissionState;
+  onCheckUpdate?: () => Promise<void>;
+  onEnableNotifications?: () => Promise<void>;
   onPromptAuth?: (message?: string, mode?: 'login' | 'signup') => void;
   onUpdateProfile: (updated: UserProfile) => void;
   onOpenEvent: (eventId: string, tab?: EventRoomTab) => void;
@@ -62,6 +69,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   media,
   supabaseStatus,
   isGuestMode = false,
+  updateInfo = null,
+  notifPermission = 'prompt',
+  onCheckUpdate,
+  onEnableNotifications,
   onPromptAuth,
   onUpdateProfile,
   onOpenEvent,
@@ -408,6 +419,15 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           {/* Get the Monte Events Native Android App Card (hidden inside native app) */}
           <DownloadAppCard compact />
 
+          {/* App Version & Live Update Check Card (works on Desktop, Mobile Web & Android App) */}
+          {onCheckUpdate && (
+            <AppUpdateCard
+              updateInfo={updateInfo}
+              onCheckUpdate={onCheckUpdate}
+              showWhenUpToDate
+            />
+          )}
+
           {/* Appearance */}
           <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-5 flex items-center justify-between gap-4">
             <div>
@@ -453,9 +473,26 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
 
           {/* Notifications */}
           <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-5 space-y-4">
-            <div className="flex items-center gap-2 text-sm font-extrabold text-[#0A1E5C] dark:text-white">
-              <Bell className="h-4 w-4 text-[#1A6BFF]" />
-              Notifications
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm font-extrabold text-[#0A1E5C] dark:text-white">
+                <Bell className="h-4 w-4 text-[#1A6BFF]" />
+                Notifications
+              </div>
+              {onEnableNotifications && (
+                <button
+                  type="button"
+                  onClick={() => void onEnableNotifications()}
+                  className={`rounded-full px-3 py-1 text-xs font-extrabold transition ${
+                    notifPermission === 'granted'
+                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                      : 'bg-[#1A6BFF] hover:bg-[#2B7FFF] text-white shadow-sm'
+                  }`}
+                >
+                  {notifPermission === 'granted'
+                    ? '✓ Device Alerts Enabled'
+                    : 'Enable Device Alerts'}
+                </button>
+              )}
             </div>
             {[
               { label: 'Event Reminders & Countdown Alerts', val: notifPush, set: setNotifPush },

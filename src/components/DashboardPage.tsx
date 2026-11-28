@@ -27,6 +27,9 @@ import { ApiStatus } from '../lib/api';
 import { motion } from 'motion/react';
 import { ThemeToggle } from './ThemeToggle';
 import { DownloadAppCard } from './DownloadAppCard';
+import { AppUpdateCard } from './AppUpdateCard';
+import { AppUpdateInfo } from '../lib/appVersion';
+import { NotificationPermissionState } from '../lib/notifications';
 import {
   CountUpNumber,
   SPRING_POP,
@@ -41,6 +44,10 @@ interface DashboardPageProps {
   media: MediaItem[];
   notifications: NotificationItem[];
   apiStatus?: ApiStatus;
+  updateInfo?: AppUpdateInfo | null;
+  notifPermission?: NotificationPermissionState;
+  onCheckUpdate?: () => Promise<void>;
+  onEnableNotifications?: () => Promise<void>;
   onMarkNotificationsRead: () => void;
   onOpenEvent: (eventId: string, tab?: EventRoomTab) => void;
   onNavigate: (page: AppPage) => void;
@@ -53,6 +60,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   media,
   notifications,
   apiStatus = 'demo',
+  updateInfo = null,
+  notifPermission = 'prompt',
+  onCheckUpdate,
+  onEnableNotifications,
   onMarkNotificationsRead,
   onOpenEvent,
   onNavigate,
@@ -182,6 +193,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     Mark all read
                   </button>
                 </div>
+                {notifPermission !== 'granted' && notifPermission !== 'unsupported' && onEnableNotifications && (
+                  <div className="px-4 py-2.5 bg-[#F0F6FF] dark:bg-[#0B1A3A] border-b border-[#D6E6FF] dark:border-[#2B7FFF]/20 flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-[#0A1E5C] dark:text-white">
+                      Get phone &amp; browser alerts
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void onEnableNotifications()}
+                      className="rounded-lg bg-[#1A6BFF] hover:bg-[#2B7FFF] px-2.5 py-1 text-[10px] font-extrabold text-white transition"
+                    >
+                      Enable
+                    </button>
+                  </div>
+                )}
                 <div className="max-h-72 overflow-y-auto divide-y divide-[#D6E6FF]/60 dark:divide-[#2B7FFF]/15">
                   {notifications.length === 0 ? (
                     <div className="px-4 py-6 text-center text-xs text-[#0A1E5C]/60 dark:text-white/60">
@@ -243,6 +268,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </button>
         </div>
       </div>
+
+      {/* App Update Card (appears automatically on Web & Android when a newer version is live) */}
+      {onCheckUpdate && (
+        <AppUpdateCard updateInfo={updateInfo} onCheckUpdate={onCheckUpdate} />
+      )}
 
       {/* Stats Row with Exact Math + Cursor Spotlight */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
