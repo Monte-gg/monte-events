@@ -633,7 +633,13 @@ function MonteAppContent() {
     useState<NotificationPermissionState>('prompt');
 
   const pushNotification = useCallback(
-    (payload: { id?: string; title: string; body: string; eventId?: string }) => {
+    (payload: {
+      id?: string;
+      title: string;
+      body: string;
+      eventId?: string;
+      channelId?: 'monte-payments' | 'monte-general';
+    }) => {
       const id = payload.id || `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       setNotifications((prev) => {
         if (prev.some((n) => n.id === id)) return prev;
@@ -649,7 +655,11 @@ function MonteAppContent() {
           ...prev,
         ].slice(0, 30);
       });
-      void sendDeviceNotification({ title: payload.title, body: payload.body });
+      void sendDeviceNotification({
+        title: payload.title,
+        body: payload.body,
+        channelId: payload.channelId,
+      });
     },
     []
   );
@@ -1171,6 +1181,15 @@ function MonteAppContent() {
                 : `${g.name} moved back to Pending`,
               nextPaid ? 'success' : 'info'
             );
+            if (nextPaid) {
+              setNotifications((curr) => curr.filter((n) => n.id !== `unpaid-${eventId}`));
+              pushNotification({
+                title: `Payment Confirmed — ${ev.name}`,
+                body: `${g.name}'s KES ${Number(g.amount || ev.costPerPerson || 0).toLocaleString()} M-PESA payment is confirmed!`,
+                eventId,
+                channelId: 'monte-payments',
+              });
+            }
             return {
               ...g,
               paid: nextPaid,
@@ -1209,6 +1228,13 @@ function MonteAppContent() {
       )
     );
     void submitGuestMpesaCodeOnApi(eventId, guestId, mpesaCode);
+    const paidEvent = events.find((e) => e.id === eventId);
+    pushNotification({
+      title: `M-PESA Code Submitted — ${paidEvent?.name || 'Monte Event'}`,
+      body: `Code ${mpesaCode}${paidEvent?.costPerPerson ? ` (KES ${paidEvent.costPerPerson.toLocaleString()})` : ''} submitted for host verification.`,
+      eventId,
+      channelId: 'monte-payments',
+    });
     showToast(`M-PESA code ${mpesaCode} submitted for host verification!`);
   };
 
@@ -1940,6 +1966,14 @@ function MonteAppContent() {
                     };
                   })
                 );
+                const paidEv = events.find((e) => e.id === eventId);
+                setNotifications((curr) => curr.filter((n) => n.id !== `unpaid-${eventId}`));
+                pushNotification({
+                  title: `M-PESA Payment Confirmed — ${paidEv?.name || 'Monte Event'}`,
+                  body: `KES ${Number(paidEv?.costPerPerson || 0).toLocaleString()} paid${reference ? ` (Ref: ${reference})` : ''}. Your spot is confirmed!`,
+                  eventId,
+                  channelId: 'monte-payments',
+                });
                 showToast('M-PESA payment confirmed! You are in the event.');
                 const freshRooms = await fetchRoomsFromApi();
                 if (freshRooms && freshRooms.length > 0) {

@@ -45,21 +45,55 @@ export async function requestNotificationPermission(): Promise<boolean> {
   }
 }
 
+let channelsInitialized = false;
+
+async function ensureAndroidChannels(): Promise<void> {
+  if (!isNativeApp() || channelsInitialized) return;
+  channelsInitialized = true;
+  try {
+    await LocalNotifications.createChannel({
+      id: 'monte-payments',
+      name: 'M-PESA Payments',
+      description: 'Instant M-PESA payment confirmations and receipts',
+      importance: 5,
+      visibility: 1,
+      vibration: true,
+      lights: true,
+    });
+    await LocalNotifications.createChannel({
+      id: 'monte-general',
+      name: 'Monte Events Alerts',
+      description: 'App updates, new event rooms, and reminders',
+      importance: 4,
+      visibility: 1,
+      vibration: true,
+    });
+  } catch {
+    // Non-fatal on older Android versions or web
+  }
+}
+
 export async function sendDeviceNotification(payload: {
   title: string;
   body: string;
+  channelId?: 'monte-payments' | 'monte-general';
 }): Promise<void> {
   if (isNativeApp()) {
     try {
-      const perm = await LocalNotifications.checkPermissions();
+      let perm = await LocalNotifications.checkPermissions();
+      if (perm.display === 'prompt' || perm.display === 'prompt-with-rationale') {
+        perm = await LocalNotifications.requestPermissions();
+      }
       if (perm.display !== 'granted') return;
+      await ensureAndroidChannels();
       await LocalNotifications.schedule({
         notifications: [
           {
             id: Math.floor(Date.now() % 2147483000),
             title: payload.title,
             body: payload.body,
-            schedule: { at: new Date(Date.now() + 250) },
+            channelId: payload.channelId || 'monte-general',
+            schedule: { at: new Date(Date.now() + 200) },
           },
         ],
       });
