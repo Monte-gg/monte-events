@@ -213,6 +213,11 @@ function MonteAppContent() {
   });
   const [apiStatus, setApiStatus] = useState<ApiStatus>('waking');
   const [currentPage, setCurrentPage] = useState<AppPage>('dashboard');
+  const [pageHistory, setPageHistory] = useState<AppPage[]>([]);
+  const currentPageRef = useRef<AppPage>('dashboard');
+  useEffect(() => {
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
   const [user, setUser] = useState<UserProfile>(INITIAL_USER_PROFILE);
   const [events, setEvents] = useState<MonteEvent[]>(INITIAL_EVENTS);
   const [members, setMembers] = useState<PlatformMember[]>(() => {
@@ -1180,10 +1185,54 @@ function MonteAppContent() {
     return { ok: true };
   };
 
+  const navigateToPage = useCallback((nextPage: AppPage) => {
+    const prevPage = currentPageRef.current;
+    if (prevPage !== nextPage) {
+      setPageHistory((hist) => [...hist.slice(-24), prevPage]);
+      if (typeof window !== 'undefined') {
+        try {
+          window.history.pushState({ montePage: nextPage }, '');
+        } catch {
+          // Non-fatal
+        }
+      }
+    }
+    setCurrentPage(nextPage);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, []);
+
+  const handleGoBack = useCallback(() => {
+    setPageHistory((hist) => {
+      if (hist.length > 0) {
+        const target = hist[hist.length - 1];
+        setCurrentPage(target);
+        return hist.slice(0, -1);
+      }
+      setCurrentPage('dashboard');
+      return hist;
+    });
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onPopState = () => {
+      if (currentPageRef.current !== 'dashboard') {
+        handleGoBack();
+      }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [handleGoBack]);
+
   const handleOpenEvent = (eventId: string, tab: EventRoomTab = 'guests') => {
     setActiveEventId(eventId);
     setActiveEventTab(tab);
-    setCurrentPage('event-room');
+    navigateToPage('event-room');
     if (tab === 'chat') {
       clearEventUnread(eventId);
     }
@@ -1202,7 +1251,7 @@ function MonteAppContent() {
   };
 
   const handleNavigate = (page: AppPage) => {
-    setCurrentPage(page);
+    navigateToPage(page);
     if (page === 'chats' && activeChatEventId) {
       clearEventUnread(activeChatEventId);
     }
@@ -2159,6 +2208,22 @@ function MonteAppContent() {
           isGuestMode={isGuestMode}
           isRefreshing={isRefreshing}
           onRefresh={handleRefreshAll}
+          canGoBack={currentPage !== 'dashboard' || pageHistory.length > 0}
+          onGoBack={handleGoBack}
+          previousLabel={(() => {
+            const prev = pageHistory[pageHistory.length - 1] || 'dashboard';
+            const labels: Record<AppPage, string> = {
+              dashboard: 'Home',
+              create: 'Create',
+              rooms: 'My Rooms',
+              'event-room': 'Event Room',
+              chats: 'Chats',
+              members: 'Members',
+              media: 'Media',
+              profile: 'Profile',
+            };
+            return labels[prev] || 'Home';
+          })()}
           onPromptAuth={promptGuestToSignUp}
         >
           {currentPage === 'dashboard' && (
@@ -2193,7 +2258,7 @@ function MonteAppContent() {
               creatorId={supabaseUserId}
               isGuestMode={isGuestMode}
               onCreateEvent={handleCreateEvent}
-              onCancel={() => setCurrentPage('dashboard')}
+              onCancel={handleGoBack}
               onShowToast={showToast}
             />
           )}
@@ -2218,7 +2283,7 @@ function MonteAppContent() {
               user={user}
               isHost={isUserRoomHost(activeEvent)}
               typingUser={typingByEvent[activeEvent.id] || null}
-              onBack={() => setCurrentPage('rooms')}
+              onBack={handleGoBack}
               onDeleteEvent={handleDeleteEvent}
               onJoinRoom={handleJoinRoom}
               onToggleGuestPaid={handleToggleGuestPaid}

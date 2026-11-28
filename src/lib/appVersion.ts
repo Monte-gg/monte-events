@@ -1,4 +1,4 @@
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.3.1';
 export const ANDROID_APK_URL =
   'https://github.com/Monte-gg/monte-events/releases/latest/download/MonteEvents.apk';
 

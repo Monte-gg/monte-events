@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  ArrowLeft,
   CalendarRange,
   Compass,
   Home,
@@ -24,6 +25,9 @@ interface AppShellProps {
   isGuestMode?: boolean;
   isRefreshing?: boolean;
   onRefresh?: () => void | Promise<void>;
+  canGoBack?: boolean;
+  onGoBack?: () => void;
+  previousLabel?: string;
   onPromptAuth?: (message?: string, mode?: 'login' | 'signup') => void;
   children: React.ReactNode;
 }
@@ -36,6 +40,9 @@ export const AppShell: React.FC<AppShellProps> = ({
   isGuestMode = false,
   isRefreshing = false,
   onRefresh,
+  canGoBack = false,
+  onGoBack,
+  previousLabel,
   onPromptAuth,
   children,
 }) => {
@@ -109,7 +116,19 @@ export const AppShell: React.FC<AppShellProps> = ({
           <MonteLogo size="sm" layout="horizontal" />
         </div>
 
-        <nav className="mt-6 flex-1 space-y-1.5">
+        <nav className="mt-5 flex-1 space-y-1.5">
+          {canGoBack && onGoBack && (
+            <button
+              type="button"
+              onClick={onGoBack}
+              className="mb-2 w-full flex items-center gap-2.5 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF] dark:bg-[#13224A] hover:border-[#1A6BFF] px-3.5 py-2.5 text-xs font-extrabold text-[#1A6BFF] dark:text-[#2B7FFF] transition active:scale-95"
+            >
+              <ArrowLeft className="h-4 w-4 shrink-0" />
+              <span className="truncate">
+                {previousLabel ? `Back to ${previousLabel}` : 'Back'}
+              </span>
+            </button>
+          )}
           {desktopNavItems.map((item) => {
             const Icon = item.icon;
             const active = isNavActive(item.id);
@@ -232,13 +251,26 @@ export const AppShell: React.FC<AppShellProps> = ({
       >
         {/* Slim Sticky Mobile Top Header (< 768px) with iOS/Android safe-area-inset-top */}
         <header className="md:hidden sticky top-0 z-30 shrink-0 flex items-center justify-between gap-2 border-b border-[#D6E6FF] dark:border-[#2B7FFF]/20 bg-white/95 dark:bg-[#0B1A3A]/95 backdrop-blur-md px-3.5 py-2.5 pt-[calc(0.625rem+env(safe-area-inset-top))]">
-          <button
-            type="button"
-            onClick={() => onNavigate('dashboard')}
-            className="flex items-center min-w-0"
-          >
-            <MonteLogo size="xs" layout="horizontal" />
-          </button>
+          <div className="flex items-center gap-2 min-w-0">
+            {canGoBack && onGoBack && (
+              <button
+                type="button"
+                onClick={onGoBack}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-[#F0F6FF] dark:bg-[#13224A] text-[#0A1E5C] dark:text-white transition active:scale-90"
+                aria-label={previousLabel ? `Back to ${previousLabel}` : 'Go back'}
+                title={previousLabel ? `Back to ${previousLabel}` : 'Go back'}
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => onNavigate('dashboard')}
+              className="flex items-center min-w-0"
+            >
+              <MonteLogo size="xs" layout="horizontal" />
+            </button>
+          </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
             {onRefresh && (
