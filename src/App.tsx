@@ -39,6 +39,7 @@ import {
   loadRoomsDirectlyFromSupabase,
   sendMessageInSupabase,
   signOutSupabase,
+  submitGuestMpesaCodeInSupabase,
   toggleGuestPaidInSupabase,
   updateMessagePinInSupabase,
   updateMessageReactionsInSupabase,
@@ -1615,6 +1616,7 @@ function MonteAppContent() {
           : ev
       )
     );
+    void submitGuestMpesaCodeInSupabase(guestId, mpesaCode);
     void submitGuestMpesaCodeOnApi(eventId, guestId, mpesaCode);
     const paidEvent = events.find((e) => e.id === eventId);
     pushNotification({

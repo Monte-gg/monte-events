@@ -431,6 +431,25 @@ export async function deleteEventInSupabase(eventId: string) {
   }
 }
 
+export async function submitGuestMpesaCodeInSupabase(
+  guestId: string,
+  mpesaCode: string
+): Promise<boolean> {
+  if (!guestId || guestId.startsWith('g-')) return false;
+  try {
+    const { error } = await supabase
+      .from('guests')
+      .update({
+        mpesa_code: mpesaCode,
+        payment_status: 'submitted',
+      })
+      .eq('id', guestId);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
 export async function toggleGuestPaidInSupabase(
   guestId: string,
   paid: boolean,
