@@ -1,4 +1,4 @@
-export const APP_VERSION = '1.2.1';
+export const APP_VERSION = '1.2.2';
 export const ANDROID_APK_URL =
   'https://github.com/Monte-gg/monte-events/releases/latest/download/MonteEvents.apk';
 
@@ -39,9 +39,10 @@ export async function checkForAppUpdate(): Promise<AppUpdateInfo> {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 6000);
     const res = await fetch(
-      'https://api.github.com/repos/Monte-gg/monte-events/releases/latest',
+      `https://api.github.com/repos/Monte-gg/monte-events/releases/latest?t=${Date.now()}`,
       {
         signal: controller.signal,
+        cache: 'no-store',
         headers: { Accept: 'application/vnd.github+json' },
       }
     );

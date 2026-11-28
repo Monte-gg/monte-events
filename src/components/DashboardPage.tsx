@@ -7,6 +7,7 @@ import {
   MessageCircle,
   Play,
   Plus,
+  RefreshCw,
   Search,
   Users,
   Wallet,
@@ -45,6 +46,8 @@ interface DashboardPageProps {
   notifications: NotificationItem[];
   apiStatus?: ApiStatus;
   onToggleOnlineMode?: () => void;
+  isRefreshing?: boolean;
+  onRefresh?: () => void | Promise<void>;
   updateInfo?: AppUpdateInfo | null;
   notifPermission?: NotificationPermissionState;
   onCheckUpdate?: () => Promise<void>;
@@ -62,6 +65,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   notifications,
   apiStatus = 'demo',
   onToggleOnlineMode,
+  isRefreshing = false,
+  onRefresh,
   updateInfo = null,
   notifPermission = 'prompt',
   onCheckUpdate,
@@ -152,6 +157,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   : 'Offline • Tap to Go Online'}
               </span>
             </button>
+            {onRefresh && (
+              <button
+                type="button"
+                onClick={() => void onRefresh()}
+                disabled={isRefreshing}
+                title="Refresh rooms, chats, members & check for app updates"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#D6E6FF] dark:border-[#2B7FFF]/35 bg-white dark:bg-[#13224A] hover:border-[#1A6BFF] px-2.5 py-1 text-[11px] font-extrabold text-[#1A6BFF] dark:text-[#2B7FFF] transition active:scale-95 disabled:opacity-70"
+              >
+                <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>{isRefreshing ? 'Refreshing…' : 'Refresh'}</span>
+              </button>
+            )}
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0A1E5C] dark:text-white mt-0.5">
             Hey, {firstName}! Ready to plan?

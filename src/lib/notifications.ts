@@ -45,6 +45,12 @@ export async function requestNotificationPermission(): Promise<boolean> {
   }
 }
 
+export type NotificationChannelId =
+  | 'monte-payments'
+  | 'monte-chats'
+  | 'monte-friends'
+  | 'monte-general';
+
 let channelsInitialized = false;
 
 async function ensureAndroidChannels(): Promise<void> {
@@ -55,6 +61,24 @@ async function ensureAndroidChannels(): Promise<void> {
       id: 'monte-payments',
       name: 'M-PESA Payments',
       description: 'Instant M-PESA payment confirmations and receipts',
+      importance: 5,
+      visibility: 1,
+      vibration: true,
+      lights: true,
+    });
+    await LocalNotifications.createChannel({
+      id: 'monte-chats',
+      name: 'Event & Friend Chats',
+      description: 'Real-time event room messages and friend DMs',
+      importance: 5,
+      visibility: 1,
+      vibration: true,
+      lights: true,
+    });
+    await LocalNotifications.createChannel({
+      id: 'monte-friends',
+      name: 'Friend Requests & Invites',
+      description: 'New friend connections and event room invitations',
       importance: 5,
       visibility: 1,
       vibration: true,
@@ -76,7 +100,7 @@ async function ensureAndroidChannels(): Promise<void> {
 export async function sendDeviceNotification(payload: {
   title: string;
   body: string;
-  channelId?: 'monte-payments' | 'monte-general';
+  channelId?: NotificationChannelId;
 }): Promise<void> {
   if (isNativeApp()) {
     try {

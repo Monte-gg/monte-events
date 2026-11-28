@@ -8,6 +8,7 @@ import {
   MessageCircle,
   Plus,
   PlusCircle,
+  RefreshCw,
   User,
   Users,
 } from 'lucide-react';
@@ -21,6 +22,8 @@ interface AppShellProps {
   totalUnreadChats: number;
   user: UserProfile;
   isGuestMode?: boolean;
+  isRefreshing?: boolean;
+  onRefresh?: () => void | Promise<void>;
   onPromptAuth?: (message?: string, mode?: 'login' | 'signup') => void;
   children: React.ReactNode;
 }
@@ -31,6 +34,8 @@ export const AppShell: React.FC<AppShellProps> = ({
   totalUnreadChats,
   user,
   isGuestMode = false,
+  isRefreshing = false,
+  onRefresh,
   onPromptAuth,
   children,
 }) => {
@@ -139,8 +144,24 @@ export const AppShell: React.FC<AppShellProps> = ({
           })}
         </nav>
 
-        {/* Sidebar Theme Toggle + Mini Profile */}
+        {/* Sidebar Refresh + Theme Toggle + Mini Profile */}
         <div className="mt-auto pt-4 border-t border-[#D6E6FF] dark:border-[#2B7FFF]/15 space-y-3">
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={() => void onRefresh()}
+              disabled={isRefreshing}
+              className="w-full flex items-center justify-center gap-2 rounded-2xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-[#F0F6FF]/90 dark:bg-[#13224A] hover:border-[#1A6BFF] px-3 py-2 text-xs font-extrabold text-[#0A1E5C] dark:text-white transition active:scale-95 disabled:opacity-70"
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 text-[#1A6BFF] dark:text-[#2B7FFF] ${
+                  isRefreshing ? 'animate-spin' : ''
+                }`}
+              />
+              {isRefreshing ? 'Syncing Updates…' : 'Refresh & Sync'}
+            </button>
+          )}
+
           <div className="flex items-center justify-between px-1">
             <span className="text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/60 dark:text-white/60">
               Theme
@@ -220,6 +241,19 @@ export const AppShell: React.FC<AppShellProps> = ({
           </button>
 
           <div className="flex items-center gap-1.5 shrink-0">
+            {onRefresh && (
+              <button
+                type="button"
+                onClick={() => void onRefresh()}
+                disabled={isRefreshing}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF] dark:bg-[#13224A] text-[#1A6BFF] dark:text-[#2B7FFF] transition active:scale-95 disabled:opacity-70"
+                aria-label="Refresh app and check updates"
+                title="Refresh & Check Updates"
+              >
+                <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => onNavigate('members')}

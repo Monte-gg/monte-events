@@ -93,6 +93,7 @@ import { ToastContainer, ToastData } from './components/Toast';
 import { AppUpdateInfo, checkForAppUpdate } from './lib/appVersion';
 import { isNativeApp } from './lib/nativeApp';
 import {
+  NotificationChannelId,
   NotificationPermissionState,
   getNotificationPermissionStatus,
   requestNotificationPermission,
@@ -163,6 +164,18 @@ function MonteAppContent() {
   );
   const syncFromSupabaseRef = useRef<(() => Promise<void>) | null>(null);
   const syncFromRenderApiRef = useRef<((timeoutMs?: number) => Promise<boolean>) | null>(null);
+  const userRef = useRef<UserProfile>(INITIAL_USER_PROFILE);
+  const eventsRef = useRef<MonteEvent[]>(INITIAL_EVENTS);
+  const pushNotificationRef = useRef<
+    ((payload: {
+      id?: string;
+      title: string;
+      body: string;
+      eventId?: string;
+      channelId?: NotificationChannelId;
+    }) => void) | null
+  >(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const deletedRoomKeysRef = useRef<Set<string>>(
     (() => {
       if (typeof window === 'undefined') return new Set<string>();
@@ -577,27 +590,106 @@ function MonteAppContent() {
     };
     void loadPublicInvite();
 
-    // Subscribe to live Realtime database changes across tabs/devices
+    // Subscribe to live Realtime database changes across tabs/devices (with instant Chat, Room & Invite notifications)
     const channel = supabase
       .channel('monte-events-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'rooms' },
-        () => {
+        (payload) => {
+          if (payload.eventType === 'INSERT' && !isGuestModeRef.current) {
+            const row = (payload.new || {}) as Record<string, unknown>;
+            const creator = String(row.created_by || '');
+            const hostEmail = String(row.host_email || '');
+            const me = userRef.current;
+            const isMine =
+              (me.email && hostEmail && me.email.toLowerCase() === hostEmail.toLowerCase()) ||
+              (me.name && creator && me.name.toLowerCase() === creator.toLowerCase());
+            if (!isMine && row.name) {
+              pushNotificationRef.current?.({
+                id: `rt-room-${String(row.id || Date.now())}`,
+                title: `New Event Room: ${String(row.name)}`,
+                body: `${creator || 'A member'} just created a new room in ${String(row.location || 'Monte Events')}.`,
+                eventId: row.id ? String(row.id) : undefined,
+                channelId: 'monte-general',
+              });
+            }
+          }
           void syncFromSupabase();
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'guests' },
-        () => {
+        (payload) => {
+          if (payload.eventType === 'INSERT' && !isGuestModeRef.current) {
+            const row = (payload.new || {}) as Record<string, unknown>;
+            const guestEmail = String(row.email || '').toLowerCase();
+            const guestName = String(row.name || '').toLowerCase();
+            const me = userRef.current;
+            const roomId = String(row.room_id || '');
+            const room = eventsRef.current.find((e) => e.id === roomId);
+            if (
+              (me.email && guestEmail && me.email.toLowerCase() === guestEmail) ||
+              (me.name && guestName && me.name.toLowerCase() === guestName)
+            ) {
+              pushNotificationRef.current?.({
+                id: `rt-invite-${String(row.id || Date.now())}`,
+                title: `Room Invite: ${room?.name || 'Monte Event'}`,
+                body: `You've been added to ${room?.name || 'an event room'}! Tap to view details.`,
+                eventId: roomId || undefined,
+                channelId: 'monte-friends',
+              });
+            }
+          }
           void syncFromSupabase();
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'messages' },
-        () => {
+        (payload) => {
+          if (payload.eventType === 'INSERT' && !isGuestModeRef.current) {
+            const row = (payload.new || {}) as Record<string, unknown>;
+            const sender = String(row.sender_name || 'Member');
+            const text = String(row.text || 'Sent an attachment');
+            const roomId = String(row.room_id || '');
+            const me = userRef.current;
+            if (sender.toLowerCase() !== me.name.toLowerCase()) {
+              const room = eventsRef.current.find((e) => e.id === roomId);
+              pushNotificationRef.current?.({
+                id: `rt-msg-${String(row.id || Date.now())}`,
+                title: `New Chat${room ? ` • ${room.name}` : ''}`,
+                body: `${sender}: ${text.slice(0, 110)}`,
+                eventId: roomId || undefined,
+                channelId: 'monte-chats',
+              });
+            }
+          }
+          void syncFromSupabase();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'event_messages' },
+        (payload) => {
+          if (!isGuestModeRef.current) {
+            const row = (payload.new || {}) as Record<string, unknown>;
+            const sender = String(row.sender_name || 'Member');
+            const text = String(row.text || 'Sent an attachment');
+            const eventId = String(row.event_id || '');
+            const me = userRef.current;
+            if (sender.toLowerCase() !== me.name.toLowerCase()) {
+              const room = eventsRef.current.find((e) => e.id === eventId);
+              pushNotificationRef.current?.({
+                id: `rt-emsg-${String(row.id || Date.now())}`,
+                title: `New Chat${room ? ` • ${room.name}` : ''}`,
+                body: `${sender}: ${text.slice(0, 110)}`,
+                eventId: eventId || undefined,
+                channelId: 'monte-chats',
+              });
+            }
+          }
           void syncFromSupabase();
         }
       )
@@ -638,7 +730,7 @@ function MonteAppContent() {
       title: string;
       body: string;
       eventId?: string;
-      channelId?: 'monte-payments' | 'monte-general';
+      channelId?: NotificationChannelId;
     }) => {
       const id = payload.id || `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       setNotifications((prev) => {
@@ -664,7 +756,19 @@ function MonteAppContent() {
     []
   );
 
-  const handleCheckAppUpdate = useCallback(async () => {
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
+
+  useEffect(() => {
+    pushNotificationRef.current = pushNotification;
+  }, [pushNotification]);
+
+  const handleCheckAppUpdate = useCallback(async (): Promise<void> => {
     const info = await checkForAppUpdate();
     setAppUpdateInfo(info);
     if (info.hasUpdate) {
@@ -672,6 +776,7 @@ function MonteAppContent() {
         id: `app-update-${info.latestVersion}`,
         title: `Monte Events v${info.latestVersion} Available!`,
         body: 'A new update is ready with the latest features and fixes. Tap the Update card to install.',
+        channelId: 'monte-general',
       });
     }
   }, [pushNotification]);
@@ -691,7 +796,7 @@ function MonteAppContent() {
     }
   }, []);
 
-  // Check for app updates + notification permissions on mount
+  // Check for app updates + notification permissions on mount, on app resume/focus, and periodically
   useEffect(() => {
     void handleCheckAppUpdate();
     void getNotificationPermissionStatus().then((status) => {
@@ -702,6 +807,35 @@ function MonteAppContent() {
         });
       }
     });
+
+    const handleResumeSync = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      void handleCheckAppUpdate();
+      void syncFromSupabaseRef.current?.();
+      if (!manualOfflineRef.current) {
+        void syncFromRenderApiRef.current?.(10000);
+      }
+    };
+
+    window.addEventListener('focus', handleResumeSync);
+    document.addEventListener('visibilitychange', handleResumeSync);
+
+    const dataInterval = window.setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      void syncFromSupabaseRef.current?.();
+    }, 30000);
+
+    const updateInterval = window.setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      void handleCheckAppUpdate();
+    }, 60000);
+
+    return () => {
+      window.removeEventListener('focus', handleResumeSync);
+      document.removeEventListener('visibilitychange', handleResumeSync);
+      window.clearInterval(dataInterval);
+      window.clearInterval(updateInterval);
+    };
   }, [handleCheckAppUpdate]);
 
   // Surface unpaid / pending event reminders in the Notification Bell
@@ -1528,6 +1662,38 @@ function MonteAppContent() {
     }
   }, [currentPage, members.length, isGuestMode, handleRefreshMembers]);
 
+  const handleRefreshAll = useCallback(async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      const [updateInfo] = await Promise.all([
+        checkForAppUpdate(),
+        syncFromSupabaseRef.current?.() ?? Promise.resolve(),
+        manualOfflineRef.current
+          ? Promise.resolve(false)
+          : (syncFromRenderApiRef.current?.(15000) ?? Promise.resolve(false)),
+        handleRefreshMembers(),
+      ]);
+      setAppUpdateInfo(updateInfo);
+      if (updateInfo?.hasUpdate) {
+        pushNotification({
+          id: `app-update-${updateInfo.latestVersion}`,
+          title: `Monte Events v${updateInfo.latestVersion} Available!`,
+          body: 'A new update is ready with the latest features and fixes. Tap the Update card to install.',
+          channelId: 'monte-general',
+        });
+        showToast(
+          `Update v${updateInfo.latestVersion} available! Tap the Update card to install.`,
+          'success'
+        );
+      } else {
+        showToast('Refreshed rooms, chats, members & updates!', 'success');
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isRefreshing, handleCheckAppUpdate, handleRefreshMembers]);
+
   const handleAddFriend = (member: PlatformMember) => {
     if (isGuestMode) {
       promptGuestToSignUp(
@@ -1555,6 +1721,11 @@ function MonteAppContent() {
         data: { monte_friends: next },
       });
       return next;
+    });
+    pushNotification({
+      title: `Friend Connected — ${member.name}`,
+      body: `You and ${member.name} are now friends on Monte Events. Tap Chats to message them!`,
+      channelId: 'monte-friends',
     });
     showToast(`Added ${member.name} as a friend!`, 'success');
   };
@@ -1616,6 +1787,12 @@ function MonteAppContent() {
       online: false,
     };
     handleAddGuestToEvent(roomId, guest);
+    pushNotification({
+      title: `Invited ${member.name}`,
+      body: `Sent room invite for "${targetRoom?.name || 'Monte Event'}" to ${member.name}.`,
+      eventId: roomId,
+      channelId: 'monte-friends',
+    });
     showToast(
       `Invited ${member.name} to ${targetRoom?.name || 'the room'}!`,
       'success'
@@ -1841,6 +2018,8 @@ function MonteAppContent() {
           totalUnreadChats={totalUnreadChats}
           user={user}
           isGuestMode={isGuestMode}
+          isRefreshing={isRefreshing}
+          onRefresh={handleRefreshAll}
           onPromptAuth={promptGuestToSignUp}
         >
           {currentPage === 'dashboard' && (
@@ -1851,6 +2030,8 @@ function MonteAppContent() {
               notifications={notifications}
               apiStatus={apiStatus}
               onToggleOnlineMode={handleToggleOnlineMode}
+              isRefreshing={isRefreshing}
+              onRefresh={handleRefreshAll}
               updateInfo={appUpdateInfo}
               notifPermission={notifPermission}
               onCheckUpdate={handleCheckAppUpdate}
