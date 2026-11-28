@@ -238,9 +238,9 @@ function mapMedia(m: RawMedia): MediaItem {
   };
 }
 
-export async function checkApiHealth(): Promise<boolean> {
+export async function checkApiHealth(timeoutMs = 8000): Promise<boolean> {
   try {
-    const res = await fetchJson<{ ok: boolean }>('/health', {}, 6000);
+    const res = await fetchJson<{ ok: boolean }>('/health', {}, timeoutMs);
     return Boolean(res.ok);
   } catch {
     return false;

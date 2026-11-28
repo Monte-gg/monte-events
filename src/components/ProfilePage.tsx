@@ -34,6 +34,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { DownloadAppCard } from './DownloadAppCard';
 import { AppUpdateCard } from './AppUpdateCard';
 import { AppUpdateInfo } from '../lib/appVersion';
+import { ApiStatus } from '../lib/api';
 import { NotificationPermissionState } from '../lib/notifications';
 import { SPRING_SNAPPY } from './MotionPrimitives';
 
@@ -42,6 +43,8 @@ interface ProfilePageProps {
   events: MonteEvent[];
   media: MediaItem[];
   supabaseStatus: { connected: boolean; schemaReady: boolean };
+  apiStatus?: ApiStatus;
+  onToggleOnlineMode?: () => void;
   isGuestMode?: boolean;
   updateInfo?: AppUpdateInfo | null;
   notifPermission?: NotificationPermissionState;
@@ -68,6 +71,8 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   events,
   media,
   supabaseStatus,
+  apiStatus = 'demo',
+  onToggleOnlineMode,
   isGuestMode = false,
   updateInfo = null,
   notifPermission = 'prompt',
@@ -440,6 +445,51 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
             </div>
             <ThemeToggle />
           </div>
+
+          {/* Online / Offline Mode Switch */}
+          {onToggleOnlineMode && (
+            <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-4 sm:p-5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-extrabold text-[#0A1E5C] dark:text-white">
+                  Connection Mode ({apiStatus === 'online' ? 'Online' : apiStatus === 'waking' ? 'Connecting…' : 'Offline'})
+                </h3>
+                <p className="text-xs text-[#0A1E5C]/65 dark:text-white/65 mt-0.5 break-words">
+                  {apiStatus === 'online'
+                    ? 'Connected to Live API & Cloud Sync. Toggle off to browse offline.'
+                    : apiStatus === 'waking'
+                    ? 'Waking up the Monte Events server and syncing rooms & members…'
+                    : 'Offline mode active. Tap the switch to go Online and sync live data.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onToggleOnlineMode}
+                disabled={apiStatus === 'waking'}
+                className={`shrink-0 inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-xs font-extrabold transition active:scale-95 ${
+                  apiStatus === 'online'
+                    ? 'bg-emerald-500 text-white shadow-sm hover:bg-emerald-600'
+                    : apiStatus === 'waking'
+                    ? 'bg-[#D6E6FF] dark:bg-[#0B1A3A] text-[#0B2E8F] dark:text-[#D6E6FF] cursor-wait'
+                    : 'bg-[#1A6BFF] hover:bg-[#2B7FFF] text-white shadow-sm'
+                }`}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    apiStatus === 'online'
+                      ? 'bg-white'
+                      : apiStatus === 'waking'
+                      ? 'bg-[#1A6BFF] animate-pulse'
+                      : 'bg-amber-300'
+                  }`}
+                />
+                {apiStatus === 'online'
+                  ? 'Online (Switch Offline)'
+                  : apiStatus === 'waking'
+                  ? 'Connecting…'
+                  : 'Go Online'}
+              </button>
+            </div>
+          )}
 
           {/* Supabase Backend Connection Status */}
           <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-4 sm:p-5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3">

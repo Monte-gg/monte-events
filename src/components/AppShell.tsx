@@ -222,6 +222,20 @@ export const AppShell: React.FC<AppShellProps> = ({
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
+              onClick={() => onNavigate('members')}
+              className={`flex h-9 w-9 items-center justify-center rounded-full border transition ${
+                currentPage === 'members'
+                  ? 'border-[#1A6BFF] bg-[#1A6BFF] text-white'
+                  : 'border-[#D6E6FF] dark:border-[#2B7FFF]/30 bg-[#F0F6FF] dark:bg-[#13224A] text-[#0A1E5C] dark:text-white'
+              }`}
+              aria-label="Open Members"
+              title="Members"
+            >
+              <Users className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
               onClick={() => onNavigate('media')}
               className={`flex h-9 w-9 items-center justify-center rounded-full border transition ${
                 currentPage === 'media'

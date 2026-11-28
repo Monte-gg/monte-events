@@ -34,6 +34,7 @@ import {
   fetchProfileFromSupabase,
   joinRoomDirectlyInSupabase,
   loadAllMonteData,
+  loadMembersDirectlyFromSupabase,
   loadRoomsDirectlyFromSupabase,
   sendMessageInSupabase,
   signOutSupabase,
@@ -124,11 +125,44 @@ function detectResetPasswordFromUrl(): boolean {
   return false;
 }
 
+function mergePlatformMembers(
+  primary: PlatformMember[],
+  secondary: PlatformMember[]
+): PlatformMember[] {
+  const byKey = new Map<string, PlatformMember>();
+  const add = (m: PlatformMember) => {
+    if (!m || !m.name) return;
+    const key = (m.email || m.id || m.name).trim().toLowerCase();
+    if (!key) return;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, m);
+    } else if (!existing.avatarUrl && m.avatarUrl) {
+      byKey.set(key, { ...existing, avatarUrl: m.avatarUrl });
+    }
+  };
+  primary.forEach(add);
+  secondary.forEach(add);
+  return Array.from(byKey.values());
+}
+
 function MonteAppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isGuestMode, setIsGuestMode] = useState(false);
   const isGuestModeRef = useRef(false);
   const apiOnlineRef = useRef(false);
+  const manualOfflineRef = useRef<boolean>(
+    (() => {
+      if (typeof window === 'undefined') return false;
+      try {
+        return window.localStorage.getItem('monte-manual-offline') === '1';
+      } catch {
+        return false;
+      }
+    })()
+  );
+  const syncFromSupabaseRef = useRef<(() => Promise<void>) | null>(null);
+  const syncFromRenderApiRef = useRef<((timeoutMs?: number) => Promise<boolean>) | null>(null);
   const deletedRoomKeysRef = useRef<Set<string>>(
     (() => {
       if (typeof window === 'undefined') return new Set<string>();
@@ -267,6 +301,48 @@ function MonteAppContent() {
           ...dbProfile,
           avatarUrl: dbProfile.avatarUrl || googleAvatar || prev.avatarUrl,
         }));
+      } else if (mounted) {
+        // Ensure signed-in user exists in public.profiles so they appear in Members directory
+        void upsertProfileInSupabase(uid, {
+          ...INITIAL_USER_PROFILE,
+          name: googleName,
+          username:
+            googleName.toLowerCase().replace(/[^a-z0-9_]/g, '') || 'member',
+          email: sessionUser.email || '',
+          phone: (meta.phone as string) || '',
+          avatarUrl: googleAvatar || '',
+          initials,
+        });
+      }
+
+      // Hydrate & sync friends across Desktop Web, Mobile Web & Android APK via Supabase user_metadata
+      const cloudFriends = Array.isArray(meta.monte_friends)
+        ? (meta.monte_friends as PlatformMember[])
+        : [];
+      let localFriends: PlatformMember[] = [];
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = window.localStorage.getItem('monte-friends');
+          localFriends = raw ? (JSON.parse(raw) as PlatformMember[]) : [];
+        } catch {
+          localFriends = [];
+        }
+      }
+      const mergedFriends = mergePlatformMembers(cloudFriends, localFriends);
+      if (mounted && mergedFriends.length > 0) {
+        setFriends(mergedFriends);
+        if (typeof window !== 'undefined') {
+          try {
+            window.localStorage.setItem('monte-friends', JSON.stringify(mergedFriends));
+          } catch {
+            // Ignore storage quota errors
+          }
+        }
+        if (mergedFriends.length > cloudFriends.length) {
+          void supabase.auth.updateUser({
+            data: { monte_friends: mergedFriends },
+          });
+        }
       }
     };
 
@@ -277,15 +353,20 @@ function MonteAppContent() {
         if (sessionUser) {
           await applySupabaseSessionUser(sessionUser);
         }
-        const [synced, directRooms] = await Promise.all([
+        const [synced, directRooms, directMembers] = await Promise.all([
           loadAllMonteData(sessionUser?.id || undefined),
           loadRoomsDirectlyFromSupabase(),
+          loadMembersDirectlyFromSupabase(),
         ]);
         if (!mounted) return;
         setSupabaseStatus({
           connected: synced.connected || directRooms !== null,
           schemaReady: synced.schemaReady || directRooms !== null,
         });
+
+        if (directMembers.length > 0 && !isGuestModeRef.current) {
+          setMembers((prev) => mergePlatformMembers(prev, directMembers));
+        }
 
         // Merge public.rooms AND legacy public.events (deduplicated by inviteCode) so no room is ever hidden
         const mergedMap = new Map<string, MonteEvent>();
@@ -353,15 +434,27 @@ function MonteAppContent() {
       }
     });
 
+    syncFromSupabaseRef.current = syncFromSupabase;
     void syncFromSupabase();
 
-    // Connect to Render Express API (graceful fallback to demo data if sleeping/unreachable)
-    const syncFromRenderApi = async () => {
-      const healthy = await checkApiHealth();
-      if (!mounted) return;
+    // Connect to Render Express API (graceful fallback to offline/Supabase mode if sleeping/unreachable)
+    const syncFromRenderApi = async (timeoutMs = 8000): Promise<boolean> => {
+      if (manualOfflineRef.current) {
+        if (mounted) {
+          setApiStatus('demo');
+          apiOnlineRef.current = false;
+        }
+        return false;
+      }
+      if (mounted) {
+        setApiStatus('waking');
+      }
+      const healthy = await checkApiHealth(timeoutMs);
+      if (!mounted) return false;
       if (!healthy) {
         setApiStatus('demo');
-        return;
+        apiOnlineRef.current = false;
+        return false;
       }
       setApiStatus('online');
       apiOnlineRef.current = true;
@@ -371,9 +464,9 @@ function MonteAppContent() {
         fetchMediaFromApi(),
         fetchMembersFromApi(),
       ]);
-      if (!mounted || isGuestModeRef.current) return;
-      if (apiMembers) {
-        setMembers(apiMembers);
+      if (!mounted || isGuestModeRef.current) return true;
+      if (apiMembers && apiMembers.length > 0) {
+        setMembers((prev) => mergePlatformMembers(apiMembers, prev));
       }
 
       if (apiRooms && apiRooms.length > 0) {
@@ -429,9 +522,15 @@ function MonteAppContent() {
       if (apiMedia && apiMedia.length > 0) {
         setMedia(apiMedia);
       }
+      return true;
     };
 
-    void syncFromRenderApi();
+    syncFromRenderApiRef.current = syncFromRenderApi;
+    if (manualOfflineRef.current) {
+      setApiStatus('demo');
+    } else {
+      void syncFromRenderApi();
+    }
 
     // Detect public ?join=CODE invite link on load (even before sign-in)
     const loadPublicInvite = async () => {
@@ -1345,18 +1444,63 @@ function MonteAppContent() {
     showToast('Guest removed from room', 'info');
   };
 
+  const handleToggleOnlineMode = useCallback(async () => {
+    if (apiStatus === 'online') {
+      manualOfflineRef.current = true;
+      apiOnlineRef.current = false;
+      setApiStatus('demo');
+      try {
+        window.localStorage.setItem('monte-manual-offline', '1');
+      } catch {
+        // Ignore storage errors
+      }
+      showToast('Switched to Offline Mode. Tap the badge anytime to go Online.', 'info');
+      return;
+    }
+
+    manualOfflineRef.current = false;
+    try {
+      window.localStorage.removeItem('monte-manual-offline');
+    } catch {
+      // Ignore storage errors
+    }
+    setApiStatus('waking');
+    showToast('Going Online — syncing rooms, members & friends…', 'info');
+
+    const [, apiOk] = await Promise.all([
+      syncFromSupabaseRef.current?.() ?? Promise.resolve(),
+      syncFromRenderApiRef.current?.(20000) ?? Promise.resolve(false),
+    ]);
+
+    if (apiOk) {
+      showToast('You are now Online! Live API & Cloud Sync active.', 'success');
+    } else {
+      showToast('Cloud synced via Supabase. Server is waking up — tap Go Online again shortly.', 'info');
+    }
+  }, [apiStatus]);
+
   const handleRefreshMembers = useCallback(async () => {
     if (isGuestMode) {
       setMembers(GUEST_PREVIEW_MEMBERS);
       return;
     }
     setMembersLoading(true);
-    const list = await fetchMembersFromApi();
-    if (list) {
-      setMembers(list);
+    const [apiList, supabaseList] = await Promise.all([
+      fetchMembersFromApi(),
+      loadMembersDirectlyFromSupabase(),
+    ]);
+    const merged = mergePlatformMembers(apiList || [], supabaseList || []);
+    if (merged.length > 0) {
+      setMembers(merged);
     }
     setMembersLoading(false);
   }, [isGuestMode]);
+
+  useEffect(() => {
+    if (currentPage === 'members' && members.length === 0 && !isGuestMode) {
+      void handleRefreshMembers();
+    }
+  }, [currentPage, members.length, isGuestMode, handleRefreshMembers]);
 
   const handleAddFriend = (member: PlatformMember) => {
     if (isGuestMode) {
@@ -1366,13 +1510,24 @@ function MonteAppContent() {
       return;
     }
     setFriends((prev) => {
-      if (prev.some((f) => f.id === member.id)) return prev;
+      if (
+        prev.some(
+          (f) =>
+            f.id === member.id ||
+            (f.email && member.email && f.email.toLowerCase() === member.email.toLowerCase())
+        )
+      ) {
+        return prev;
+      }
       const next = [member, ...prev];
       try {
         window.localStorage.setItem('monte-friends', JSON.stringify(next));
       } catch {
         // Ignore storage quota errors
       }
+      void supabase.auth.updateUser({
+        data: { monte_friends: next },
+      });
       return next;
     });
     showToast(`Added ${member.name} as a friend!`, 'success');
@@ -1669,6 +1824,7 @@ function MonteAppContent() {
               media={media}
               notifications={notifications}
               apiStatus={apiStatus}
+              onToggleOnlineMode={handleToggleOnlineMode}
               updateInfo={appUpdateInfo}
               notifPermission={notifPermission}
               onCheckUpdate={handleCheckAppUpdate}
@@ -1859,6 +2015,8 @@ function MonteAppContent() {
               events={events}
               media={media}
               supabaseStatus={supabaseStatus}
+              apiStatus={apiStatus}
+              onToggleOnlineMode={handleToggleOnlineMode}
               isGuestMode={isGuestMode}
               updateInfo={appUpdateInfo}
               notifPermission={notifPermission}

@@ -7,6 +7,7 @@ import {
   Guest,
   MediaItem,
   MonteEvent,
+  PlatformMember,
   UserProfile,
 } from '../types';
 
@@ -880,6 +881,98 @@ export async function deleteRoomDirectlyInSupabase(
     await Promise.allSettled(ops);
   } catch {
     // Graceful fallback — Render API delete also runs in parallel
+  }
+}
+
+export async function loadMembersDirectlyFromSupabase(): Promise<PlatformMember[]> {
+  try {
+    const [profilesRes, guestsRes, roomsRes] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select(
+          'id, name, username, bio, location, member_since, avatar_url, initials, preferred_types, email'
+        ),
+      supabase.from('guests').select('id, name, email, initials'),
+      supabase.from('rooms').select('created_by, host_email'),
+    ]);
+
+    const byKey = new Map<string, PlatformMember>();
+
+    const makeInitials = (name: string) => {
+      const parts = String(name || 'Monte Member').trim().split(/\s+/);
+      return (
+        (parts[0]?.[0] || 'M') + (parts[1]?.[0] || parts[0]?.[1] || 'E')
+      ).toUpperCase();
+    };
+
+    const makeUsername = (name: string) =>
+      String(name || 'member')
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, '') || 'member';
+
+    for (const p of profilesRes.data || []) {
+      const name = String(p.name || 'Monte Member').trim();
+      const email = p.email ? String(p.email).trim() : '';
+      const key = (email || String(p.id)).toLowerCase();
+      byKey.set(key, {
+        id: String(p.id),
+        name,
+        username: String(p.username || makeUsername(name)),
+        email,
+        avatarUrl: String(p.avatar_url || ''),
+        initials: String(p.initials || makeInitials(name)),
+        bio: String(p.bio || 'Monte Events member'),
+        location: String(p.location || 'Nairobi, KE'),
+        memberSince: String(p.member_since || 'Monte Member'),
+        preferredTypes: Array.isArray(p.preferred_types)
+          ? (p.preferred_types as EventType[])
+          : ['Roadtrip', 'Birthday'],
+      });
+    }
+
+    for (const g of guestsRes.data || []) {
+      const name = String(g.name || '').trim();
+      const email = g.email ? String(g.email).trim() : '';
+      if (!name) continue;
+      const key = (email || name).toLowerCase();
+      if (byKey.has(key)) continue;
+      byKey.set(key, {
+        id: `guest-member-${g.id}`,
+        name,
+        username: makeUsername(name),
+        email,
+        avatarUrl: '',
+        initials: String(g.initials || makeInitials(name)),
+        bio: 'Monte Events guest & member',
+        location: 'Nairobi, KE',
+        memberSince: 'Monte Member',
+        preferredTypes: ['Roadtrip', 'Birthday'],
+      });
+    }
+
+    for (const r of roomsRes.data || []) {
+      const name = String(r.created_by || '').trim();
+      const email = r.host_email ? String(r.host_email).trim() : '';
+      if (!name) continue;
+      const key = (email || name).toLowerCase();
+      if (byKey.has(key)) continue;
+      byKey.set(key, {
+        id: `host-member-${makeUsername(name)}`,
+        name,
+        username: makeUsername(name),
+        email,
+        avatarUrl: '',
+        initials: makeInitials(name),
+        bio: 'Monte Events host',
+        location: 'Nairobi, KE',
+        memberSince: 'Monte Host',
+        preferredTypes: ['Roadtrip', 'House Party'],
+      });
+    }
+
+    return Array.from(byKey.values());
+  } catch {
+    return [];
   }
 }
 

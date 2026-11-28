@@ -32,6 +32,9 @@ const configuredOrigins = (
 const allowedOrigins = new Set([
   ...configuredOrigins,
   'https://monte-gg.github.io',
+  'https://localhost',
+  'http://localhost',
+  'capacitor://localhost',
   'http://localhost:5173',
   'http://localhost:4173',
 ]);
@@ -41,7 +44,11 @@ app.use(
     origin(origin, callback) {
       if (!origin) return callback(null, true);
       const normalized = origin.replace(/\/+$/, '');
-      if (allowedOrigins.has(normalized)) {
+      if (
+        allowedOrigins.has(normalized) ||
+        /^https?:\/\/localhost(:\d+)?$/i.test(normalized) ||
+        /^capacitor:\/\/localhost$/i.test(normalized)
+      ) {
         return callback(null, true);
       }
       return callback(new Error(`CORS blocked for origin: ${origin}`));

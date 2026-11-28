@@ -44,6 +44,7 @@ interface DashboardPageProps {
   media: MediaItem[];
   notifications: NotificationItem[];
   apiStatus?: ApiStatus;
+  onToggleOnlineMode?: () => void;
   updateInfo?: AppUpdateInfo | null;
   notifPermission?: NotificationPermissionState;
   onCheckUpdate?: () => Promise<void>;
@@ -60,6 +61,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   media,
   notifications,
   apiStatus = 'demo',
+  onToggleOnlineMode,
   updateInfo = null,
   notifPermission = 'prompt',
   onCheckUpdate,
@@ -116,30 +118,40 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             <p className="text-xs font-bold uppercase tracking-wider text-[#1A6BFF] dark:text-[#2B7FFF]">
               Welcome back to Monte Events
             </p>
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+            <button
+              type="button"
+              onClick={() => onToggleOnlineMode?.()}
+              disabled={apiStatus === 'waking'}
+              title={
                 apiStatus === 'online'
-                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                  ? 'Tap to switch to Offline mode'
+                  : 'Tap to connect Online and sync live data'
+              }
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-extrabold transition active:scale-95 ${
+                apiStatus === 'online'
+                  ? 'border-emerald-500/35 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25'
                   : apiStatus === 'waking'
-                  ? 'bg-[#D6E6FF] dark:bg-[#13224A] text-[#0B2E8F] dark:text-[#D6E6FF]'
-                  : 'bg-[#D6E6FF]/80 dark:bg-[#13224A] text-[#0A1E5C]/75 dark:text-white/75'
+                  ? 'border-[#1A6BFF]/30 bg-[#D6E6FF] dark:bg-[#13224A] text-[#0B2E8F] dark:text-[#D6E6FF] cursor-wait'
+                  : 'border-[#1A6BFF]/40 bg-[#D6E6FF]/90 dark:bg-[#13224A] text-[#0A1E5C] dark:text-white hover:border-[#1A6BFF]'
               }`}
             >
               <span
-                className={`h-1.5 w-1.5 rounded-full ${
+                className={`h-2 w-2 rounded-full ${
                   apiStatus === 'online'
                     ? 'bg-emerald-500'
                     : apiStatus === 'waking'
                     ? 'bg-[#1A6BFF] animate-pulse'
-                    : 'bg-[#2B7FFF]'
+                    : 'bg-amber-400'
                 }`}
               />
-              {apiStatus === 'online'
-                ? 'Live API'
-                : apiStatus === 'waking'
-                ? 'Waking up server…'
-                : 'Offline mode'}
-            </span>
+              <span>
+                {apiStatus === 'online'
+                  ? 'Online • Switch Offline'
+                  : apiStatus === 'waking'
+                  ? 'Connecting Online…'
+                  : 'Offline • Tap to Go Online'}
+              </span>
+            </button>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0A1E5C] dark:text-white mt-0.5">
             Hey, {firstName}! Ready to plan?
