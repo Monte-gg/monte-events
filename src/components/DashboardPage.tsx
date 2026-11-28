@@ -26,6 +26,7 @@ import { formatDateShort, formatKES } from '../data/sampleData';
 import { ApiStatus } from '../lib/api';
 import { motion } from 'motion/react';
 import { ThemeToggle } from './ThemeToggle';
+import { DownloadAppCard } from './DownloadAppCard';
 import {
   CountUpNumber,
   SPRING_POP,
@@ -346,6 +347,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Get the Monte Events Native Android App Card (hidden inside native app) */}
+      <DownloadAppCard />
 
       {/* Section: Available Events Planned */}
       <section className="space-y-4">

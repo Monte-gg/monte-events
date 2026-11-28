@@ -31,6 +31,7 @@ import { uploadFileToStorage } from '../lib/monteService';
 import { motion } from 'motion/react';
 import { MonteLogo } from './MonteLogo';
 import { ThemeToggle } from './ThemeToggle';
+import { DownloadAppCard } from './DownloadAppCard';
 import { SPRING_SNAPPY } from './MotionPrimitives';
 
 interface ProfilePageProps {
@@ -404,6 +405,9 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
       {/* TAB: SETTINGS */}
       {activeTab === 'settings' && (
         <div className="space-y-4">
+          {/* Get the Monte Events Native Android App Card (hidden inside native app) */}
+          <DownloadAppCard compact />
+
           {/* Appearance */}
           <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-5 flex items-center justify-between gap-4">
             <div>
