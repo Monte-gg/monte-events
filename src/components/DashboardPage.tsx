@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  BadgeCheck,
   Bell,
   Calendar,
   CheckCircle2,
@@ -48,6 +49,8 @@ interface DashboardPageProps {
   onToggleOnlineMode?: () => void;
   isRefreshing?: boolean;
   onRefresh?: () => void | Promise<void>;
+  isGuestMode?: boolean;
+  onOpenCompleteProfile?: () => void;
   updateInfo?: AppUpdateInfo | null;
   notifPermission?: NotificationPermissionState;
   onCheckUpdate?: () => Promise<void>;
@@ -67,6 +70,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onToggleOnlineMode,
   isRefreshing = false,
   onRefresh,
+  isGuestMode = false,
+  onOpenCompleteProfile,
   updateInfo = null,
   notifPermission = 'prompt',
   onCheckUpdate,
@@ -301,6 +306,33 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       {/* App Update Card (appears automatically on Web & Android when a newer version is live) */}
       {onCheckUpdate && (
         <AppUpdateCard updateInfo={updateInfo} onCheckUpdate={onCheckUpdate} />
+      )}
+
+      {/* Complete Profile Banner for existing users who have not verified their profile yet */}
+      {!isGuestMode && !user.verified && onOpenCompleteProfile && (
+        <div className="rounded-3xl border border-[#1A6BFF]/35 bg-gradient-to-r from-[#0B2E8F] via-[#1A6BFF] to-[#2B7FFF] p-4 sm:p-5 text-white shadow-monte flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-sm">
+              <BadgeCheck className="h-6 w-6 text-white" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm sm:text-base font-extrabold leading-tight">
+                Complete your profile to get Verified
+              </p>
+              <p className="text-xs text-white/85 mt-0.5">
+                Add your photo, phone & bio so friends can find you and unlock your Verified Account badge.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenCompleteProfile}
+            className="shrink-0 inline-flex items-center justify-center gap-1.5 rounded-2xl bg-white hover:bg-[#F0F6FF] text-[#0B2E8F] px-4 py-2.5 text-xs sm:text-sm font-extrabold shadow-sm transition active:scale-95"
+          >
+            <BadgeCheck className="h-4 w-4 text-[#1A6BFF]" />
+            Complete Profile
+          </button>
+        </div>
       )}
 
       {/* Stats Row with Exact Math + Cursor Spotlight */}

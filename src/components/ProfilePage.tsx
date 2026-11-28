@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  BadgeCheck,
   Bell,
   Cake,
   Calendar,
@@ -50,6 +51,7 @@ interface ProfilePageProps {
   notifPermission?: NotificationPermissionState;
   onCheckUpdate?: () => Promise<void>;
   onEnableNotifications?: () => Promise<void>;
+  onOpenCompleteProfile?: () => void;
   onPromptAuth?: (message?: string, mode?: 'login' | 'signup') => void;
   onUpdateProfile: (updated: UserProfile) => void;
   onOpenEvent: (eventId: string, tab?: EventRoomTab) => void;
@@ -78,6 +80,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   notifPermission = 'prompt',
   onCheckUpdate,
   onEnableNotifications,
+  onOpenCompleteProfile,
   onPromptAuth,
   onUpdateProfile,
   onOpenEvent,
@@ -192,9 +195,26 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
               </div>
 
               <div className="pb-1">
-                <h1 className="text-xl sm:text-2xl font-extrabold text-[#0A1E5C] dark:text-white">
-                  {user.name}
-                </h1>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-xl sm:text-2xl font-extrabold text-[#0A1E5C] dark:text-white">
+                    {user.name}
+                  </h1>
+                  {user.verified ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/35 px-2.5 py-0.5 text-[11px] font-extrabold text-emerald-600 dark:text-emerald-400">
+                      <BadgeCheck className="h-3.5 w-3.5" />
+                      Verified
+                    </span>
+                  ) : !isGuestMode && onOpenCompleteProfile ? (
+                    <button
+                      type="button"
+                      onClick={onOpenCompleteProfile}
+                      className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/35 px-2.5 py-0.5 text-[11px] font-extrabold text-amber-600 dark:text-amber-300 hover:bg-amber-500/25 transition"
+                    >
+                      <BadgeCheck className="h-3.5 w-3.5" />
+                      Complete to Verify
+                    </button>
+                  ) : null}
+                </div>
                 <p className="text-xs sm:text-sm font-bold text-[#1A6BFF] dark:text-[#2B7FFF]">
                   @{user.username}
                 </p>
@@ -288,6 +308,50 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
       {/* TAB: ABOUT */}
       {activeTab === 'about' && (
         <div className="rounded-3xl border border-[#D6E6FF] dark:border-[#2B7FFF]/25 bg-white dark:bg-[#13224A] p-5 sm:p-6 space-y-6">
+          {/* Account Verification Status Card */}
+          <div
+            className={`rounded-2xl border p-4 flex flex-wrap items-center justify-between gap-3 ${
+              user.verified
+                ? 'border-emerald-500/35 bg-emerald-500/10'
+                : 'border-[#1A6BFF]/30 bg-[#F0F6FF] dark:bg-[#0B1A3A]'
+            }`}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                  user.verified
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-[#1A6BFF] text-white'
+                }`}
+              >
+                <BadgeCheck className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-wider text-[#0A1E5C]/60 dark:text-white/60">
+                  Account Status
+                </p>
+                <p
+                  className={`text-sm font-extrabold ${
+                    user.verified
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-[#0A1E5C] dark:text-white'
+                  }`}
+                >
+                  {user.verified ? 'Verified Account ✓' : 'Profile Incomplete — Not Verified Yet'}
+                </p>
+              </div>
+            </div>
+            {!user.verified && !isGuestMode && onOpenCompleteProfile && (
+              <button
+                type="button"
+                onClick={onOpenCompleteProfile}
+                className="shrink-0 rounded-xl bg-[#1A6BFF] hover:bg-[#2B7FFF] px-4 py-2 text-xs font-extrabold text-white shadow-sm transition active:scale-95"
+              >
+                Complete Profile
+              </button>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[
               { label: 'Full Name', value: user.name, icon: User },

@@ -184,6 +184,8 @@ export interface UserProfile {
   avatarUrl: string;
   initials: string;
   preferredTypes: EventType[];
+  verified?: boolean;
+  profileCompleted?: boolean;
 }
 
 export interface NotificationItem {
@@ -216,6 +218,8 @@ export interface PlatformMember {
   avatarUrl: string;
   initials: string;
   preferredTypes: EventType[];
+  verified?: boolean;
+  profileCompleted?: boolean;
 }
 
 export type AppPage =

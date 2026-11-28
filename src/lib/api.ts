@@ -249,7 +249,7 @@ export async function checkApiHealth(timeoutMs = 8000): Promise<boolean> {
 
 export async function fetchMembersFromApi(): Promise<PlatformMember[] | null> {
   try {
-    const data = await fetchJson<{ members: PlatformMember[] }>('/api/members');
+    const data = await fetchJson<{ members: PlatformMember[] }>('/api/members', {}, 15000);
     return data.members || [];
   } catch {
     return null;

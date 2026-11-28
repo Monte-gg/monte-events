@@ -85,6 +85,7 @@ import { GlobalChatsPage } from './components/GlobalChatsPage';
 import { MyRoomsPage } from './components/MyRoomsPage';
 import { MembersPage } from './components/MembersPage';
 import { MemberProfileModal } from './components/MemberProfileModal';
+import { CompleteProfileModal } from './components/CompleteProfileModal';
 import { EventFlyerModal } from './components/EventFlyerModal';
 import { MediaVaultPage } from './components/MediaVaultPage';
 import { ProfilePage } from './components/ProfilePage';
@@ -214,8 +215,20 @@ function MonteAppContent() {
   const [currentPage, setCurrentPage] = useState<AppPage>('dashboard');
   const [user, setUser] = useState<UserProfile>(INITIAL_USER_PROFILE);
   const [events, setEvents] = useState<MonteEvent[]>(INITIAL_EVENTS);
-  const [members, setMembers] = useState<PlatformMember[]>([]);
+  const [members, setMembers] = useState<PlatformMember[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const cached = window.localStorage.getItem('monte-members-cache');
+      return cached ? (JSON.parse(cached) as PlatformMember[]) : [];
+    } catch {
+      return [];
+    }
+  });
   const [membersLoading, setMembersLoading] = useState(false);
+  const [completeProfileModal, setCompleteProfileModal] = useState<{
+    open: boolean;
+    isNewAccount: boolean;
+  }>({ open: false, isNewAccount: false });
   const [friends, setFriends] = useState<PlatformMember[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
@@ -276,15 +289,17 @@ function MonteAppContent() {
       const googleAvatar =
         (meta.avatar_url as string) || (meta.picture as string) || '';
 
+      const metaVerified = Boolean(meta.account_verified || meta.profile_completed);
+      const createdAtMs = sessionUser.created_at
+        ? Date.parse(sessionUser.created_at)
+        : 0;
+      const isRecentSignup =
+        createdAtMs > 0 && Date.now() - createdAtMs < 15 * 60 * 1000;
+
       // Send one-time Welcome email on first-time Google / OAuth signup
       if (sessionUser.email && typeof window !== 'undefined') {
         const welcomeKey = `monte-welcome-sent-${uid}`;
         if (!window.localStorage.getItem(welcomeKey)) {
-          const createdAtMs = sessionUser.created_at
-            ? Date.parse(sessionUser.created_at)
-            : 0;
-          const isRecentSignup =
-            createdAtMs > 0 && Date.now() - createdAtMs < 15 * 60 * 1000;
           if (isRecentSignup) {
             window.localStorage.setItem(welcomeKey, '1');
             void sendWelcomeEmailOnApi(sessionUser.email, googleName);
@@ -300,12 +315,28 @@ function MonteAppContent() {
         ...prev,
         name: googleName,
         username:
-          googleName.toLowerCase().replace(/[^a-z0-9_]/g, '') || prev.username,
+          (meta.username as string) ||
+          googleName.toLowerCase().replace(/[^a-z0-9_]/g, '') ||
+          prev.username,
         email: sessionUser.email || prev.email,
         phone: (meta.phone as string) || prev.phone,
+        mpesaNumber: (meta.mpesa_number as string) || (meta.phone as string) || prev.mpesaNumber,
+        location: (meta.location as string) || prev.location,
+        bio: (meta.bio as string) || prev.bio,
         avatarUrl: googleAvatar || prev.avatarUrl,
         initials,
+        verified: metaVerified || prev.verified,
+        profileCompleted: metaVerified || prev.profileCompleted,
       }));
+
+      // Automatically prompt brand-new users right after creating an account to complete their profile
+      if (isRecentSignup && !metaVerified && typeof window !== 'undefined') {
+        const promptKey = `monte-complete-prompted-${uid}`;
+        if (!window.sessionStorage.getItem(promptKey)) {
+          window.sessionStorage.setItem(promptKey, '1');
+          setCompleteProfileModal({ open: true, isNewAccount: true });
+        }
+      }
 
       const dbProfile = await fetchProfileFromSupabase(uid);
       if (mounted && dbProfile) {
@@ -313,6 +344,8 @@ function MonteAppContent() {
           ...prev,
           ...dbProfile,
           avatarUrl: dbProfile.avatarUrl || googleAvatar || prev.avatarUrl,
+          verified: metaVerified || prev.verified,
+          profileCompleted: metaVerified || prev.profileCompleted,
         }));
       } else if (mounted) {
         // Ensure signed-in user exists in public.profiles so they appear in Members directory
@@ -361,8 +394,12 @@ function MonteAppContent() {
 
     const syncFromSupabase = async () => {
       try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const sessionUser = sessionData.session?.user || null;
+        const [{ data: sessionData }, liveUserRes] = await Promise.all([
+          supabase.auth.getSession(),
+          supabase.auth.getUser().catch(() => ({ data: { user: null } })),
+        ]);
+        // Prefer live getUser() so fresh user_metadata (friends, verified status) syncs immediately across devices
+        const sessionUser = liveUserRes?.data?.user || sessionData.session?.user || null;
         if (sessionUser) {
           await applySupabaseSessionUser(sessionUser);
         }
@@ -763,6 +800,79 @@ function MonteAppContent() {
   useEffect(() => {
     eventsRef.current = events;
   }, [events]);
+
+  // Keep Members instant (0ms cache + live guests/hosts + signed-in user fallback)
+  useEffect(() => {
+    if (isGuestMode) return;
+    const derived: PlatformMember[] = [];
+    if (isAuthenticated && user.name && user.email) {
+      derived.push({
+        id: supabaseUserId || `self-${user.email}`,
+        name: user.name,
+        username: user.username || 'member',
+        email: user.email,
+        avatarUrl: user.avatarUrl || '',
+        initials: user.initials || 'ME',
+        bio: user.bio || 'Monte Events member',
+        location: user.location || 'Nairobi, KE',
+        memberSince: user.memberSince || 'Monte Member',
+        preferredTypes: user.preferredTypes || ['Roadtrip', 'Birthday'],
+      });
+    }
+    for (const ev of events) {
+      if (ev.createdBy) {
+        const parts = ev.createdBy.trim().split(/\s+/);
+        derived.push({
+          id: ev.hostId || `host-${ev.createdBy.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+          name: ev.createdBy,
+          username: ev.createdBy.toLowerCase().replace(/[^a-z0-9_]/g, '') || 'host',
+          email: ev.hostEmail || '',
+          avatarUrl: '',
+          initials: ((parts[0]?.[0] || 'M') + (parts[1]?.[0] || parts[0]?.[1] || 'H')).toUpperCase(),
+          bio: 'Monte Events host',
+          location: ev.location || 'Nairobi, KE',
+          memberSince: 'Monte Host',
+          preferredTypes: [ev.type],
+        });
+      }
+      for (const g of ev.guests) {
+        if (!g.name) continue;
+        derived.push({
+          id: g.friendId || `guest-${g.id}`,
+          name: g.name,
+          username: g.name.toLowerCase().replace(/[^a-z0-9_]/g, '') || 'member',
+          email: g.email || '',
+          avatarUrl: '',
+          initials: g.initials || 'ME',
+          bio: 'Monte Events member',
+          location: 'Nairobi, KE',
+          memberSince: 'Monte Member',
+          preferredTypes: [ev.type],
+        });
+      }
+    }
+    if (derived.length > 0) {
+      setMembers((prev) => {
+        const next = mergePlatformMembers(prev, derived);
+        if (next.length === prev.length) return prev;
+        try {
+          window.localStorage.setItem('monte-members-cache', JSON.stringify(next));
+        } catch {
+          // Ignore storage errors
+        }
+        return next;
+      });
+    }
+  }, [events, isAuthenticated, isGuestMode, supabaseUserId, user]);
+
+  useEffect(() => {
+    if (isGuestMode || members.length === 0) return;
+    try {
+      window.localStorage.setItem('monte-members-cache', JSON.stringify(members));
+    } catch {
+      // Ignore storage errors
+    }
+  }, [members, isGuestMode]);
 
   useEffect(() => {
     pushNotificationRef.current = pushNotification;
@@ -1929,6 +2039,35 @@ function MonteAppContent() {
     }
     setUser(updated);
     void upsertProfileInSupabase(supabaseUserId, updated);
+    void supabase.auth.updateUser({
+      data: {
+        full_name: updated.name,
+        username: updated.username,
+        phone: updated.phone,
+        mpesa_number: updated.mpesaNumber,
+        location: updated.location,
+        bio: updated.bio,
+        avatar_url: updated.avatarUrl,
+        ...(updated.verified ? { account_verified: true, profile_completed: true } : {}),
+      },
+    });
+  };
+
+  const handleCompleteProfile = (updated: UserProfile) => {
+    const verifiedProfile: UserProfile = {
+      ...updated,
+      verified: true,
+      profileCompleted: true,
+    };
+    handleUpdateProfile(verifiedProfile);
+    setCompleteProfileModal({ open: false, isNewAccount: false });
+    pushNotification({
+      id: `account-verified-${Date.now()}`,
+      title: 'Account Status: Verified ✓',
+      body: 'Your Monte Events profile is complete! Your Verified badge is now live on your profile.',
+      channelId: 'monte-general',
+    });
+    showToast('Profile completed! Account Status: Verified ✓', 'success');
   };
 
   const handleMarkNotificationsRead = () => {
@@ -2032,6 +2171,10 @@ function MonteAppContent() {
               onToggleOnlineMode={handleToggleOnlineMode}
               isRefreshing={isRefreshing}
               onRefresh={handleRefreshAll}
+              isGuestMode={isGuestMode}
+              onOpenCompleteProfile={() =>
+                setCompleteProfileModal({ open: true, isNewAccount: false })
+              }
               updateInfo={appUpdateInfo}
               notifPermission={notifPermission}
               onCheckUpdate={handleCheckAppUpdate}
@@ -2237,6 +2380,9 @@ function MonteAppContent() {
               notifPermission={notifPermission}
               onCheckUpdate={handleCheckAppUpdate}
               onEnableNotifications={handleEnableNotifications}
+              onOpenCompleteProfile={() =>
+                setCompleteProfileModal({ open: true, isNewAccount: false })
+              }
               onPromptAuth={promptGuestToSignUp}
               onUpdateProfile={handleUpdateProfile}
               onOpenEvent={handleOpenEvent}
@@ -2281,6 +2427,15 @@ function MonteAppContent() {
           }
           showToast('Password updated successfully!', 'success');
         }}
+      />
+
+      {/* Complete Profile & Verify Account Modal */}
+      <CompleteProfileModal
+        open={completeProfileModal.open}
+        user={user}
+        isNewAccount={completeProfileModal.isNewAccount}
+        onClose={() => setCompleteProfileModal({ open: false, isNewAccount: false })}
+        onComplete={handleCompleteProfile}
       />
 
       {/* Member / Friend Profile Modal */}
